@@ -1,0 +1,10 @@
+node_modules/
+.expo/
+.expo-export-check/
+dist/
+android/
+ios/
+modules/*/android/
+modules/*/ios/
+package-lock.json
+coverage/

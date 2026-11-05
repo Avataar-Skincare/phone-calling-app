@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Compass Dialer",
+    "slug": "phone-calling-app",
+    "owner": "avataar-skincare",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "compassdialer",
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/images/icon.png",
+    "ios": {
+      "supportsTablet": false,
+      "icon": "./assets/images/icon.png",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "predictiveBackGestureEnabled": false,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "monochromeImage": "./assets/images/adaptive-icon-monochrome.png",
+        "backgroundColor": "#0B7A6E"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 160,
+          "resizeMode": "contain",
+          "backgroundColor": "#F4F6F7",
+          "dark": {
+            "image": "./assets/images/splash-icon.png",
+            "backgroundColor": "#0D1418"
+          }
+        }
+      ],
+      "expo-secure-store"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "compassApiUrl": "https://test-leads.avataarskin.com/api",
+      "router": {},
+      "eas": {
+        "projectId": "2d1c62d9-4fe7-4cad-8b0a-698e1fc67af9"
+      }
+    }
+  }
+}

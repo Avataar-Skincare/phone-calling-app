@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  js:
+    name: Lint, types, tests, bundle
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lock file has every required peer (EAS runs npm ci)
+        run: npm run check:lockfile
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Formatting
+        run: npm run format:check
+
+      - name: Type-check (generates expo-router route types first)
+        run: npm run typecheck
+
+      - name: Unit and integration tests (with coverage)
+        run: npm test -- --ci --coverage
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/
+          retention-days: 14
+
+      - name: Bundle Android and iOS JavaScript
+        run: npm run bundle-check
+
+  contract:
+    name: Contract tests (Compass testing, read-only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Only when the repo has the test credentials (Settings → Secrets → Actions).
+    # Use a Compass testing bypass number so no SMS is sent. Never point this at production.
+    env:
+      COMPASS_TEST_PHONE: ${{ secrets.COMPASS_TEST_PHONE }}
+      COMPASS_TEST_OTP: ${{ secrets.COMPASS_TEST_OTP }}
+    steps:
+      - uses: actions/checkout@v4
+        if: env.COMPASS_TEST_PHONE != ''
+
+      - uses: actions/setup-node@v4
+        if: env.COMPASS_TEST_PHONE != ''
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+        if: env.COMPASS_TEST_PHONE != ''
+
+      - name: Compass API contract
+        if: env.COMPASS_TEST_PHONE != ''
+        run: npm run test:contract
+
+  android-native:
+    name: Compile native module (Android)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - run: npm ci
+
+      - name: Generate android/ (continuous native generation)
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Compile sim-dialer
+        working-directory: android
+        run: ./gradlew :sim-dialer:compileDebugKotlin --console=plain
+
+      - name: Check merged manifest permissions
+        working-directory: android
+        run: |
+          ./gradlew :app:processDebugMainManifest --console=plain -q
+          manifest=$(find app/build/intermediates -path "*merged_manifest*debug*" -name AndroidManifest.xml | head -1)
+          grep -q 'android.permission.CALL_PHONE' "$manifest"
+          grep -q 'android.permission.READ_PHONE_STATE' "$manifest"
+          if grep -q 'android.permission.READ_CALL_LOG' "$manifest"; then
+            echo "READ_CALL_LOG must not be requested (Google Play policy)"; exit 1
+          fi

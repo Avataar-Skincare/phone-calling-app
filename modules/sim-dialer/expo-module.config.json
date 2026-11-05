@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["SimDialerModule"]
+  },
+  "android": {
+    "modules": ["com.avataarskin.simdialer.SimDialerModule"]
+  }
+}
