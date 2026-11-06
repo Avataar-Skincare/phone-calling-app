@@ -20,7 +20,7 @@ module.exports = {
     "!src/types/**",
   ],
   coverageReporters: ["text-summary", "text", "lcov"],
-  // Screen tests load the whole app on their first render; under a parallel run that can take
-  // longer than Jest's 5 s default.
-  testTimeout: 30_000,
+  // Screen tests load the whole app on their first render: about 10 s alone, 20–30 s when six
+  // integration files start together on a busy machine or a CI runner. Later tests take < 1 s.
+  testTimeout: 60_000,
 };

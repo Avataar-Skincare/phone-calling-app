@@ -1,25 +1,51 @@
 import { View } from "react-native";
-import { RADIUS, SPACE, useColors } from "@/theme/tokens";
+import { stageTone } from "@/lib/format";
+import { RADIUS, SPACE, useTone, type Tone } from "@/theme/tokens";
 import type { CodeLabel } from "@/types/compass";
 import { AppText } from "./AppText";
 
-/** Hot stages read warm (amber); everything else uses the neutral accent tint. */
-export function StagePill({ stage }: { stage: CodeLabel | null | undefined }) {
-  const c = useColors();
+/** Stage badge in Compass's stage colours (warm amber, hot orange, cold cyan, paid green…). */
+export function StagePill({
+  stage,
+  stageType,
+}: {
+  stage: CodeLabel | null | undefined;
+  stageType?: string | null;
+}) {
+  const tone = useTone(stageTone(stage?.code, stageType));
   if (!stage) return null;
-  const hot = stage.code.startsWith("hot");
   return (
     <View
       style={{
         alignSelf: "flex-start",
-        backgroundColor: hot ? c.amberSoft : c.accentSoft,
+        backgroundColor: tone.bg,
         borderRadius: RADIUS.pill,
         paddingHorizontal: SPACE.sm,
         paddingVertical: 2,
       }}
     >
-      <AppText variant="small" tone={hot ? "amber" : "accent"} style={{ fontSize: 12, fontWeight: "600" }}>
+      <AppText variant="small" style={{ fontSize: 12, fontWeight: "600", color: tone.fg }}>
         {stage.label}
+      </AppText>
+    </View>
+  );
+}
+
+/** Small coloured badge for statuses (Inbound/Outbound, Paid/Partial, overdue…). */
+export function Badge({ label, tone }: { label: string; tone: Tone }) {
+  const t = useTone(tone);
+  return (
+    <View
+      style={{
+        alignSelf: "flex-start",
+        backgroundColor: t.bg,
+        borderRadius: RADIUS.pill,
+        paddingHorizontal: SPACE.sm,
+        paddingVertical: 2,
+      }}
+    >
+      <AppText variant="small" style={{ fontSize: 12, fontWeight: "600", color: t.fg }}>
+        {label}
       </AppText>
     </View>
   );

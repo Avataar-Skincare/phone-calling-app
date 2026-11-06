@@ -16,7 +16,7 @@ import { formatPhone } from "@/lib/phone";
 import { formatWhen } from "@/lib/time";
 import { useAuthStore } from "@/store/auth.store";
 import { useCallStore } from "@/store/call.store";
-import { useOutcomeQueue } from "@/store/outcomeQueue.store";
+import { useCallLog } from "@/store/callLog.store";
 import { RADIUS, SPACE, useColors } from "@/theme/tokens";
 
 const ROLE_LABEL: Record<string, string> = {
@@ -207,30 +207,17 @@ function CallingSection({ perm, sims, reload }: ReturnType<typeof useCallingSett
 }
 
 /**
- * Log out, unless that would strand work: an unsaved call outcome, or outcomes still waiting to
- * reach Compass (they are sent with the agent's session, so they'd sit until the same agent logs
- * back in).
+ * Log out; ask first during a call (it carries on in the phone app), or while calls haven't reached
+ * Compass (they're sent with this agent's login, so they wait until the same agent logs back in).
  */
 function confirmLogout() {
-  const userId = useAuthStore.getState().session?.user.id;
-  const waiting = useOutcomeQueue.getState().items.filter((i) => i.userId === String(userId)).length;
   const call = useCallStore.getState().session;
-
-  if (call) {
+  const userId = String(useAuthStore.getState().session?.user.id ?? "");
+  const unsent = useCallLog.getState().calls.filter((c) => c.userId === userId && c.status !== "sent").length;
+  if (unsent > 0 && (!call || call.status === "ended")) {
     Alert.alert(
-      "Finish your last call first",
-      `Record or discard the call to ${call.name} before logging out.`,
-      [
-        { text: "OK", style: "cancel" },
-        { text: "Record outcome", onPress: () => router.push("/outcome") },
-      ],
-    );
-    return;
-  }
-  if (waiting > 0) {
-    Alert.alert(
-      "Outcomes still waiting to send",
-      `${waiting} ${waiting === 1 ? "outcome hasn't" : "outcomes haven't"} reached Compass yet. They'll be sent the next time you log in on this phone.`,
+      "Calls not saved to Compass yet",
+      `${unsent} ${unsent === 1 ? "call hasn't" : "calls haven't"} reached Compass. They'll be sent the next time you log in on this phone.`,
       [
         { text: "Stay logged in", style: "cancel" },
         { text: "Log out anyway", style: "destructive", onPress: () => void signOut() },
@@ -238,5 +225,19 @@ function confirmLogout() {
     );
     return;
   }
-  void signOut();
+  if (!call || call.status === "ended") {
+    void signOut();
+    return;
+  }
+  Alert.alert("A call is in progress", `You're still on the call to ${call.name}.`, [
+    { text: "Stay logged in", style: "cancel" },
+    {
+      text: "Log out anyway",
+      style: "destructive",
+      onPress: () => {
+        useCallStore.getState().clear();
+        void signOut();
+      },
+    },
+  ]);
 }

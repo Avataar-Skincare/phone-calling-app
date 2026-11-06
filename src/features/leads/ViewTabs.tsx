@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react";
 import { Pressable, ScrollView } from "react-native";
+
 import { AppText } from "@/components/AppText";
+import { Icon } from "@/components/icons";
 import { RADIUS, SPACE, useColors } from "@/theme/tokens";
 import type { SmartViewCounts, SmartViewDef } from "@/types/compass";
 
@@ -11,12 +13,15 @@ interface Props {
   onSelect: (key: string) => void;
 }
 
-/** Horizontally scrolling Smart View chips with their counts. */
+/**
+ * Smart View sub-tabs, as on Compass: person icon for lead views, clipboard for task views,
+ * the label, and the count when Compass returned one.
+ */
 export function ViewTabs({ views, counts, selected, onSelect }: Props) {
   const c = useColors();
   const ref = useRef<ScrollView>(null);
 
-  // Start at the left whenever the set of tabs changes (e.g. switching department).
+  // Start at the left whenever the set of tabs changes (switching department).
   useEffect(() => {
     ref.current?.scrollTo({ x: 0, animated: false });
   }, [views]);
@@ -32,6 +37,7 @@ export function ViewTabs({ views, counts, selected, onSelect }: Props) {
       {views.map((v) => {
         const on = v.key === selected;
         const count = counts?.[v.key];
+        const fg = on ? c.accentInk : c.muted;
         return (
           <Pressable
             key={v.key}
@@ -39,6 +45,9 @@ export function ViewTabs({ views, counts, selected, onSelect }: Props) {
             accessibilityRole="tab"
             accessibilityState={{ selected: on }}
             style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 6,
               paddingHorizontal: SPACE.md,
               paddingVertical: SPACE.sm,
               borderRadius: RADIUS.pill,
@@ -47,11 +56,12 @@ export function ViewTabs({ views, counts, selected, onSelect }: Props) {
               backgroundColor: on ? c.accent : c.surface,
             }}
           >
+            <Icon name={v.type === "task" ? "clipboard" : "person"} size={15} color={fg} />
             <AppText variant="label" tone={on ? "accentInk" : "ink"}>
               {v.label}
               {typeof count === "number" ? (
                 <AppText variant="label" tone={on ? "accentInk" : "muted"} style={{ fontWeight: "400" }}>
-                  {`  ${count}`}
+                  {`  ${count.toLocaleString("en-IN")}`}
                 </AppText>
               ) : null}
             </AppText>

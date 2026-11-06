@@ -11,6 +11,7 @@ import { renderRouter } from "expo-router/testing-library";
 import * as SimDialer from "@modules/sim-dialer";
 import { useAuthStore } from "@/store/auth.store";
 import { useCallStore } from "@/store/call.store";
+import { useCallLog, type FinishedCall } from "@/store/callLog.store";
 import { useSettingsStore } from "@/store/settings.store";
 import { fakeCompass } from "../support/compass";
 import { resetAppState, signedInAs } from "../support/state";
@@ -46,7 +47,22 @@ describe("account screen", () => {
     expect(await screen.findByText("Log in with your Compass number")).toBeTruthy();
   });
 
-  it("blocks logout while a call is unsaved", async () => {
+  it("asks before logging out while calls haven't reached Compass", async () => {
+    fakeCompass();
+    useCallLog.setState({
+      calls: [{ id: "c1", userId: "31", status: "pending", attempts: 2 } as FinishedCall],
+    });
+    renderRouter("./src/app", { initialUrl: "/settings" });
+    fireEvent.press(await screen.findByText("Log out"));
+    expect(alertSpy).toHaveBeenLastCalledWith(
+      "Calls not saved to Compass yet",
+      expect.stringMatching(/1 call hasn't reached Compass/),
+      expect.any(Array),
+    );
+    expect(useAuthStore.getState().session).not.toBeNull();
+  });
+
+  it("asks before logging out during a call", async () => {
     fakeCompass();
     useCallStore.setState({
       session: {
@@ -72,7 +88,7 @@ describe("account screen", () => {
     renderRouter("./src/app", { initialUrl: "/settings" });
     fireEvent.press(await screen.findByText("Log out"));
     expect(alertSpy).toHaveBeenLastCalledWith(
-      "Finish your last call first",
+      "A call is in progress",
       expect.stringMatching(/Asha Rao/),
       expect.any(Array),
     );
@@ -156,7 +172,7 @@ describe("call guard", () => {
       },
     });
     renderRouter("./src/app", { initialUrl: "/" });
-    await screen.findByText("Asha Rao");
+    await screen.findByLabelText("Asha Rao, open lead");
 
     fireEvent.press(screen.getByLabelText("Call Asha Rao"));
     await waitFor(() =>

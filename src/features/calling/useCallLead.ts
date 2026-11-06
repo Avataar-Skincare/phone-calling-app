@@ -23,7 +23,7 @@ function showError(e: unknown) {
 /**
  * Shared tap handler for every call button.
  *  1. Checks the number can be dialed.
- *  2. Refuses while another call is live or its outcome hasn't been saved.
+ *  2. Refuses while another call is still live.
  *  3. On Android, shows the phone-permission explainer once before the first call.
  *  4. Places the call and opens a call session.
  */
@@ -36,19 +36,8 @@ export function useCallLead() {
     }
 
     const current = useCallStore.getState().session;
-    if (current && current.status === "ended") {
-      // One call at a time: the last call's outcome has to be saved (or discarded) first.
-      Alert.alert(
-        "Save the last call first",
-        `Record how the call to ${current.name} went, then call again.`,
-        [
-          { text: "Not now", style: "cancel" },
-          { text: "Record outcome", onPress: () => router.push("/outcome") },
-        ],
-      );
-      return;
-    }
-    if (current) {
+    // A call that has just ended is still being recorded in the background; don't block on it.
+    if (current && current.status !== "ended") {
       Alert.alert(
         "A call is still open",
         `The call to ${current.name} hasn't finished yet. If it has ended, clear it and try again.`,

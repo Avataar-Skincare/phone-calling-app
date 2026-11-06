@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-import { formatPhone, maskPhone, toE164, toIndianMobile } from "./phone";
+import { formatPhone, maskPhone, toE164, toIndianMobile, whatsAppUrl } from "./phone";
 
 describe("toIndianMobile (login input)", () => {
   it.each([
@@ -63,5 +63,18 @@ describe("formatPhone (lead screen)", () => {
 
   it("says when there is no number", () => {
     expect(formatPhone(undefined)).toBe("No number");
+  });
+});
+
+describe("whatsAppUrl (WhatsApp button)", () => {
+  it.each([
+    ["9876500001", "https://wa.me/919876500001"],
+    ["+91 98765 00001", "https://wa.me/919876500001"],
+    ["09876500001", "https://wa.me/919876500001"],
+    ["+14155550123", "https://wa.me/14155550123"],
+    ["12345", null],
+    [null, null],
+  ])("%s → %s", (input, out) => {
+    expect(whatsAppUrl(input)).toBe(out);
   });
 });

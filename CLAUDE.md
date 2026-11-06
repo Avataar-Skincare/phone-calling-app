@@ -23,7 +23,9 @@ compile the module: see [docs/development.md](docs/development.md#checking-nativ
 - Rules live in pure functions in `src/lib/` with a `*.test.ts`. Change both together.
 - Call sessions: all transitions in `src/lib/callState.ts`. `startCall()` stores the session before
   dialing.
-- `modules/sim-dialer`: Kotlin, Swift and `index.ts` must stay in step. Never add `READ_CALL_LOG`.
+- `modules/sim-dialer`: Kotlin, Swift and `index.ts` must stay in step. `READ_CALL_LOG` is used for
+  talk time only ([ADR 0006](docs/decisions/0006-call-times-and-whatsapp.md)); never add write access to
+  the call log or contacts.
 - `/android` and `/ios` are generated; never edit them.
 - Times to Compass: ISO UTC (`toISOString()`), like the web form. Times shown: IST via `src/lib/time.ts`.
 - Update `docs/` and `CHANGELOG.md` with every change. Commit only when asked.
@@ -33,6 +35,8 @@ compile the module: see [docs/development.md](docs/development.md#checking-nativ
 - [x] 1 · Foundation and login
 - [x] 2 · Smart View lists and lead screen
 - [x] 3 · Native calling (`sim-dialer`), call sessions, permissions, SIM choice
-- [x] 4 · Outcome sheet ([docs/outcomes.md](docs/outcomes.md)) and offline queue
+- [x] 4 · ~~Outcome sheet~~ replaced 2026-11-06 by a "Manual Outbound Call" log with talk, ringing and
+      total time ([ADR 0005](docs/decisions/0005-log-calls-as-manual-outbound-call.md),
+      [0006](docs/decisions/0006-call-times-and-whatsapp.md)); WhatsApp button
 - [ ] 5 · Device testing and store builds
 - [ ] 6 · Pilot and rollout

@@ -3,12 +3,11 @@
 /**
  * Contract: the real Compass API still returns what the app relies on.
  *
- * READ-ONLY. Logs in and makes GET requests; never saves an outcome or changes data.
+ * READ-ONLY. Logs in and makes GET requests; never changes data.
  * See jest.contract.config.js for the environment variables.
  */
 import { toLeadItem } from "@/features/leads/leadItem";
 import type {
-  ActivityFormConfig,
   Department,
   OpportunityDetail,
   Paginated,
@@ -148,39 +147,5 @@ run("Compass contract (read-only)", () => {
       }),
     );
     expect(res.body.activities.length).toBeLessThanOrEqual(50);
-  });
-
-  it("the outcome form config has stages and fields of known types", async () => {
-    const res = await call<ActivityFormConfig>(
-      "GET",
-      `/opportunities/${opportunityId}/activity-form/config`,
-      {
-        token,
-      },
-    );
-    expect(res.status).toBe(200);
-    const cfg = res.body;
-    expect(cfg.current_stage_code).toEqual(expect.any(String));
-    expect(cfg.available_stages.length).toBeGreaterThan(0);
-    for (const s of cfg.available_stages) {
-      expect(s).toEqual(
-        expect.objectContaining({
-          code: expect.any(String),
-          label: expect.any(String),
-          sort_order: expect.any(Number),
-        }),
-      );
-    }
-    for (const form of Object.values(cfg.form_configs)) {
-      expect(form).toHaveProperty("activity_type_code");
-      for (const f of [...form.top_level_fields, ...form.sub_form_fields]) {
-        expect(["text", "number", "datetime", "dropdown"]).toContain(f.type);
-        expect(typeof f.required).toBe("boolean");
-        if (f.type === "dropdown") expect(Array.isArray(f.options)).toBe(true);
-      }
-    }
-    if (cfg.department_code === "sales") {
-      expect(cfg.form_configs.not_connected?.activity_type_code).toBe("phone_call_not_connected");
-    }
   });
 });

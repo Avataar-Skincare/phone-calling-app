@@ -24,7 +24,7 @@ Option A. Calls use the agent's own SIM and number.
 - No backend change is needed to place calls; the app ships faster.
 - Customers see the agent's number. There is no recording or AI quality analysis for app calls.
 - Android can dial instantly; iOS always shows a system "Call" prompt.
-- Android can't tell whether a call was answered; the agent records it in the outcome sheet.
+- Android can't tell whether a call was answered from call-state events; talk time comes from the call log instead ([0006](0006-call-times-and-whatsapp.md)).
 - Agents who use the app must have their Compass `telephony_extension` cleared, or Skytel will
   also dial their leads (Compass only pushes tasks to Skytel for agents with an extension).
 - `placeCall` sits behind one function (`src/features/calling/callFlow.ts`), so option B can

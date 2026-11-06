@@ -13,7 +13,7 @@ import { RADIUS, SPACE, useColors } from "@/theme/tokens";
 type Params = { name: string; phone: string; opportunityId?: string; leadId?: string; taskId?: string };
 
 /**
- * Android only, shown once before the first call. Explains the two phone permissions, asks for
+ * Android only, shown once before the first call. Explains the three phone permissions, asks for
  * them, then places the call the agent tapped. Declining still works: the dialer opens with the
  * number filled in and the agent presses call themselves.
  */
@@ -56,9 +56,10 @@ export default function PermissionsScreen() {
 
   const points: [string, string][] = [
     ["Make phone calls", "So a tap on a number starts the call straight away, from your SIM."],
+    ["Phone status", "So the app knows when the call starts and ends."],
     [
-      "Phone status",
-      "So the app knows when the call ends and can ask you how it went. It never reads your call log or contacts.",
+      "Call logs",
+      "So the app can see how long the client talked, for calls you place from this app only. It doesn't read your contacts or other calls.",
     ],
   ];
 
@@ -67,7 +68,7 @@ export default function PermissionsScreen() {
       <View style={{ flex: 1, justifyContent: "center", gap: SPACE.xl }}>
         <View style={{ gap: SPACE.sm }}>
           <AppText variant="title">Allow calling from the app</AppText>
-          <AppText tone="muted">Android will ask for two permissions.</AppText>
+          <AppText tone="muted">Android will ask for three permissions.</AppText>
         </View>
 
         <View style={{ gap: SPACE.md }}>
@@ -91,8 +92,8 @@ export default function PermissionsScreen() {
 
         {blocked ? (
           <AppText tone="amber">
-            These permissions were turned off earlier. Turn on "Phone" for Compass Dialer in Settings, then
-            come back.
+            These permissions were turned off earlier. Turn on "Phone" and "Call logs" for Compass Dialer in
+            Settings, then come back.
           </AppText>
         ) : null}
 

@@ -35,7 +35,7 @@ public class SimDialerModule: Module {
     }
 
     AsyncFunction("capabilities") { () -> [String: Any] in
-      ["platform": "ios", "canDirectDial": false, "canTrack": true, "canChooseSim": false]
+      ["platform": "ios", "canDirectDial": false, "canTrack": true, "canChooseSim": false, "canReadCallLog": false]
     }
 
     AsyncFunction("startTracking") { () -> Bool in
@@ -49,6 +49,11 @@ public class SimDialerModule: Module {
 
     AsyncFunction("listSims") { () -> [[String: String]] in
       []
+    }
+
+    // iOS gives apps no call log. Talk time comes from CXCallObserver's hasConnected instead.
+    AsyncFunction("lastCallFromLog") { (_: String, _: Double) -> [String: Double]? in
+      nil
     }
 
     AsyncFunction("placeCall") { (number: String, _: String?, promise: Promise) in

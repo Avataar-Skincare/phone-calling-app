@@ -33,113 +33,94 @@ v1 of the app needs **no Compass changes**. Every endpoint below already exists.
 
 ## Lead lists (Smart Views)
 
-| Endpoint                                           | Returns                                                                              |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `GET /smart-views/definitions`                     | `[{ key, label, department: "sales" or "cs", type: "lead" or "task", description }]` |
-| `GET /smart-views/counts?department=sales`         | `{ [viewKey]: total }`                                                               |
-| `GET /smart-views/data?view=&page=&limit=&search=` | `{ data: Row[], meta: { total, page, limit, total_pages } }`                         |
-| `GET /opportunities/departments`                   | `[{ id, code, label }]`, used to map `user.departmentId` to a code                   |
+The home screen is Compass's Smart Views page: Sales / Customer Support tabs (shown to everyone,
+Sales first, like the web), the 14 view tabs, and each view's own filters, defaults and sort.
+Per-view rules live in `src/features/leads/viewConfig.ts` (tested in `viewConfig.test.ts`).
 
-Row shapes differ by view type. `src/features/leads/leadItem.ts` maps both to `LeadItem`.
+| Endpoint                                           | Used for                                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `GET /opportunities/departments`                   | `[{ id, code, label }]`, maps `user.departmentId` to a code                          |
+| `GET /smart-views/definitions`                     | `[{ key, label, department: "sales" or "cs", type: "lead" or "task", description }]` |
+| `GET /smart-views/counts?department=sales`         | `{ [viewKey]: total }` (tab counts; slow, never retried)                             |
+| `GET /smart-views/data?view=&page=&limit=&…`       | `{ data: Row[], meta: { total, page, limit, total_pages } }`                         |
+| `GET /smart-views/opportunity-stages?department=`  | Stage filter options                                                                 |
+| `GET /settings/sources/dropdown`                   | Source filter options                                                                |
+| `GET /agents/dropdown`                             | Owner filter options (hidden for agents; team leads see their team)                  |
+| `POST /tasks/:id/update` `{ status: "completed" }` | "Mark as completed" on task views and the Tasks tab                                  |
+
+`/smart-views/data` filter parameters, sent only when set (exactly as the web sends them):
+`search`, `owner`, `sort_by`, `sort_order`, `stage` / `stages`, `source`, `date_type`, `schedule`
+(`today`, `this_week`, …, `custom` with `date_from` / `date_to` as ISO UTC), `status`, `task_type`,
+`activity_codes`. Page size 20 / 50 / 100 (Compass's "Rows per page").
+
+Row shapes differ by view type. `src/features/leads/leadItem.ts` maps them all to `LeadItem`.
 
 - **Lead views** (`hot_leads`, `warm_leads`, `important_customers`, …): lead `id`, names,
-  `primary_phone`, `lead_source`, `opportunity_id`, `opportunity_stage`, `owner`.
-- **Task views** (`first_call_tasks`, `hot_and_warm_tasks`, …): task `id`, `due_at`, `task_type`,
-  `status`, nested `lead { id, first_name, last_name, primary_phone }`, `opportunity_id`,
-  `opportunity_stage`, `department`.
+  `primary_phone`, `lead_source`, `lead_score`, `opportunity_id`, `opportunity_stage`, `owner`,
+  `created_at`, `updated_at`, `last_important_activity`.
+- **Task views** (`first_call_tasks`, `hot_and_warm_tasks`, …): task `id`, `title`, `due_at`,
+  `task_type`, `status`, `created_by`, `assigned_to`, nested `lead { … primary_phone }`,
+  `opportunity_id`, `opportunity_stage`, `department`.
 
-## Lead screen
+## Opportunity page
 
-`GET /opportunities/:id` returns the lead, stage, owner, department, available stages and the
-latest **50** activities. `lead.phone` is the first stored number, not necessarily the primary
-one, so the app prefers the `primary_phone` it already has from the list row.
+Tapping a lead shows Compass's opportunity
+page: header, profile panel (Call, four tiles, Properties, Change Stage) and seven tabs. Each card
+and tab loads from its own endpoint, as on the web.
 
-## Saving a call outcome
+| Endpoint                                                                    | Where                                                |
+| --------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `GET /opportunities/:id`                                                    | Header, profile, Properties, Stage History, stages   |
+| `GET /opportunities/:id/lead-sources`                                       | Overview · Lead Sources                              |
+| `GET /opportunities/:id/sales-overview`                                     | Overview · Last Add to Cart, Haut AI, Photos (Sales) |
+| `GET /opportunities/:id/cs-overview`                                        | Overview · Basic Info, Complaint Status (CS)         |
+| `GET /opportunities/:id/recent-whatsapp`                                    | Overview · WhatsApp                                  |
+| `GET /leads/:leadId/virtual-consultations`                                  | Overview · Virtual Consultation                      |
+| `GET /leads/:leadId/package-details`                                        | Overview · Packages                                  |
+| `GET /leads/:leadId/recent-service`                                         | Overview · Recent Service                            |
+| `GET /leads/:leadId/latest-sessions`                                        | Overview · Latest Sessions                           |
+| `GET /leads/:leadId`                                                        | Activities tab (all departments)                     |
+| `GET /tasks?opportunity_id=&status=&sort_by=due_at&sort_order=ASC&limit=50` | Tasks tab                                            |
+| `GET /ameyo/opportunities/:id/calls?page=&limit=`                           | Calls tab (20 a page) and Overview call card (3)     |
+| `GET /leads/:leadId/purchase-history`                                       | Purchase History tab                                 |
+| `GET /leads/:leadId/appointments?page=&limit=10`                            | Appointments tab                                     |
+| `POST /opportunities/:id/stage` `{ opportunity_stage_id, reason? }`         | Change Stage                                         |
 
-### `GET /opportunities/:id/activity-form/config`
+`lead.phone` on the opportunity is the first stored number, not necessarily the primary one, so
+the app prefers the `primary_phone` it already has from the list row. Call recordings open in the
+browser (`recording_url` is relative to the Compass host).
 
-```jsonc
+Not in the app yet (Compass web only): Create Task, Activity Form, Book
+Appointment, WhatsApp chat, Assign Owner, Edit Name, AI call analysis, in-app recording playback.
+
+## After a call: Manual Outbound Call
+
+`POST /activities/log` with the agent's token ([ADR 0005](decisions/0005-log-calls-as-manual-outbound-call.md),
+[0006](decisions/0006-call-times-and-whatsapp.md)); body built by `src/lib/callLog.ts`:
+
+```json
 {
-  "opportunity_id": "77120",
-  "department_code": "sales",
-  "current_stage_code": "new_lead",
-  "lead_data": { "lead_id": "48213", "first_name": "Priya", "phone_number": "98XXXXX214", "…": "…" },
-  "available_stages": [
-    { "id": "1", "code": "new_lead", "label": "New Lead", "stage_type": "active", "sort_order": 10 },
-  ],
-  "form_configs": {
-    "not_connected": {
-      "sub_form_name": "Phone Call Not Connected",
-      "activity_type_code": "phone_call_not_connected",
-      "top_level_fields": [],
-      "sub_form_fields": [
-        {
-          "key": "select_outcome",
-          "label": "Select Outcome",
-          "type": "dropdown",
-          "required": true,
-          "options": [
-            "Busy",
-            "No Answer",
-            "Not Reachable",
-            "Switched Off",
-            "Wrong Number",
-            "Call Back Later",
-            "Not Interested",
-          ],
-        },
-        {
-          "key": "next_follow_up_datetime",
-          "label": "Next Follow Up",
-          "type": "datetime",
-          "required": true,
-          "options": null,
-        },
-        { "key": "notes", "label": "Notes", "type": "text", "required": true, "options": null },
-      ],
-    },
-  },
+  "phone": "9876500001",
+  "activity_type": "manual_outbound_call",
+  "opportunity_id": "7001",
+  "data": {
+    "agent_user_id": "31",
+    "agent_name": "Test Agent",
+    "call_tapped_at": "2026-11-06T10:15:00.000Z",
+    "call_started_at": "2026-11-06T10:15:01.000Z",
+    "call_ended_at": "2026-11-06T10:16:32.000Z",
+    "call_duration_seconds": 91,
+    "call_talk_seconds": 80,
+    "call_ring_seconds": 11,
+    "call_answered": "yes",
+    "call_end_estimated": "no",
+    "call_platform": "android",
+    "call_source": "mobile_app",
+    "app_session_id": "mw4rlagj-53mkq6"
+  }
 }
 ```
 
-Field `type` is one of `text`, `number`, `datetime`, `dropdown`. Stages with no form have
-`activity_type_code: null` and no fields.
-
-### `POST /opportunities/:id/activity-form`
-
-```jsonc
-{
-  "stage_code": "not_connected",
-  "submitted_by_user_id": "31",
-  "concerns_raised": "optional free text",
-  "top_level_data": {},
-  "sub_form_data": {
-    "select_outcome": "No Answer",
-    "next_follow_up_datetime": "2026-11-09T11:00:00.000Z",
-    "notes": "…",
-  },
-}
-```
-
-What Compass does, in one transaction:
-
-1. Validates required fields and dropdown values for that stage. **Extra keys are stored** on the
-   activity unchanged (the app adds call details this way).
-2. Moves the opportunity to `stage_code` if it changed; `concerns_raised` becomes the stage-change
-   reason. Fires `opportunity.stage.changed` (Journeys, Meta events, closing the First Call task).
-3. Logs the stage's activity (`phone_call_connected`, `phone_call_not_connected`, …) when the stage
-   has an `activity_type_code`.
-4. Creates a Follow Up task from the `datetime` field the server marks `creates_task`. The new task
-   closes older pending tasks on that opportunity.
-
-Two consequences for the app:
-
-- A stage **without** an activity type logs no call activity, so call details go into
-  `concerns_raised` instead.
-- Re-selecting the **current** stage when it has no form records nothing at all. The app blocks it.
-
-### Not available in v1
-
-The form does **not** emit `activity.logged`, so the call counter and the "we tried to reach you"
-WhatsApp (both listen for that event) don't fire for app calls. Bringing them in needs a
-JWT-protected call-log endpoint in Compass. See [ADR 0002](decisions/0002-save-outcomes-through-activity-form.md).
+Replies **200 even on failure**: `{ "activity_id": null, "message": "<reason>" }`. Success has a
+non-null `activity_id`. The `manual_outbound_call` activity type must exist in each Compass
+(Settings → Activity Types, see ADR 0005). `/opportunities/:id/activity-form` is no longer used.

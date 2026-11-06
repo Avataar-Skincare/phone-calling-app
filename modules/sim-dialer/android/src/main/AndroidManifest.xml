@@ -1,9 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
   <!-- Place the call directly instead of opening the dialer pre-filled. Runtime permission. -->
   <uses-permission android:name="android.permission.CALL_PHONE" />
-  <!-- Call-state events (TelephonyCallback on Android 12+) and the SIM list. Runtime permission.
-       READ_CALL_LOG is deliberately NOT requested: Google Play allows it only for default dialer apps. -->
+  <!-- Call-state events (TelephonyCallback on Android 12+) and the SIM list. Runtime permission. -->
   <uses-permission android:name="android.permission.READ_PHONE_STATE" />
+  <!-- Talk time of the app's own calls: Android reports no "answered" moment, only the call log
+       has it. Runtime permission. Google Play allows it only for default dialer apps, so the app is
+       distributed outside the public Play Store (docs/decisions/0006-read-call-log-for-talk-time.md). -->
+  <uses-permission android:name="android.permission.READ_CALL_LOG" />
   <!-- Tablets without telephony can still install the app; calling is then unavailable. -->
   <uses-feature android:name="android.hardware.telephony" android:required="false" />
 </manifest>

@@ -23,12 +23,14 @@ every function falls back to a plain `tel:` link with no tracking, so screens ne
 
 Platform limits worth knowing:
 
-- **Android can't tell whether the customer answered.** `OFFHOOK` starts while the outgoing call
-  is still ringing. Durations on Android include ring time.
+- **Android call-state events can't tell whether the customer answered.** `OFFHOOK` starts while
+  the outgoing call is still ringing. Talk time comes from the call log after the call instead.
 - **Android fires the current state the moment tracking starts** (normally `idle`). The state
   machine ignores `idle` until the call has gone off-hook.
-- **`READ_CALL_LOG` is never requested.** Google Play only allows it for default dialer apps. CI
-  fails if it appears in the merged manifest.
+- **`READ_CALL_LOG` is requested** for talk time only (the newest outgoing call to the number since
+  the tap). Google Play allows it only for default dialer apps, so the app ships outside the public
+  Play Store ([ADR 0006](decisions/0006-call-times-and-whatsapp.md)). CI requires it and refuses
+  write access to the call log or contacts.
 - **Recording isn't possible** on either platform.
 
 ## Call session
@@ -57,8 +59,31 @@ current call state:
 - A call started but its end was missed: `ended` now, marked **approximate**.
 - Tracked, nothing started, back within 15 s: the agent cancelled (iOS prompt) or the call failed.
   The session is **discarded**.
-- Untracked (no permission, fallback) or away longer: `ended`, approximate. The outcome sheet lets
-  the agent say the call didn't happen.
+- Untracked (no permission, fallback) or away longer: `ended`, approximate.
+
+## After the call
+
+`CallTracker` hands an `ended` session to `finishCall()` (`src/features/calling/callFlow.ts`):
+
+1. Talk time: iPhone from the answer event; Android from the call log (`lastCallFromLog`, up to 4
+   tries 1 s apart, since the phone writes the entry just after the call).
+2. `callTimes()` works out total (dialing start → end; the tap only if no start event), talk and
+   ringing (total − talk).
+3. The call is stored in `useCallLog` (persisted), the session is cleared, and the summary card
+   shows on the list and the client page.
+4. `sendCalls.ts` logs it in Compass as a "Manual Outbound Call" (`POST /activities/log`, ADR 0005).
+   Success is a non-null `activity_id` (Compass answers 200 on failure too). Network, 401, 429 and
+   5xx are retried with back-off (1, 2, 4 … min, max 30), on return to the app and every 15 s;
+   other errors are shown as "couldn't be saved" with Retry / Discard.
+
+A new call can start while the last one is still being finished.
+
+## WhatsApp
+
+`src/components/WhatsAppButton.tsx` sits next to every Call button. It opens
+`https://wa.me/<country code + number>` (`whatsAppUrl` in `src/lib/phone.ts`), which starts a
+WhatsApp chat with the client on Android and iPhone, or WhatsApp's web page when the app isn't
+installed. It needs no permission and doesn't touch the call session.
 
 ## Permissions (Android)
 

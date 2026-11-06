@@ -1,6 +1,6 @@
 # 0002: Save outcomes through Compass's activity form
 
-- **Status:** Accepted
+- **Status:** Superseded by [0005](0005-log-calls-as-manual-outbound-call.md) (2026-11-06)
 - **Date:** 2026-11-04
 
 ## Context

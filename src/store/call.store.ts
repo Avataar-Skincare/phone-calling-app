@@ -5,7 +5,7 @@ import { applyCallEvent, resolveOnResume, type CallSession, type NativeState } f
 import { persistStorage } from "./persistStorage";
 
 interface CallState {
-  /** The current or most recent call. Persisted, so a call survives the app being killed. */
+  /** The call in progress (or just ended, being finished). Persisted, so it survives the app being killed. */
   session: CallSession | null;
   start: (s: CallSession) => void;
   setMode: (id: string, mode: CallSession["mode"]) => void;
@@ -23,6 +23,7 @@ export const useCallStore = create<CallState>()(
         const s = get().session;
         if (s && s.id === id) set({ session: { ...s, mode } });
       },
+      // An ended session stays until finishCall() has recorded its times, then it is cleared.
       applyEvent: (e) => {
         const s = get().session;
         if (s) set({ session: applyCallEvent(s, e) });

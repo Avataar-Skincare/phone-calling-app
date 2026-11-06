@@ -111,6 +111,8 @@ jobs:
           manifest=$(find app/build/intermediates -path "*merged_manifest*debug*" -name AndroidManifest.xml | head -1)
           grep -q 'android.permission.CALL_PHONE' "$manifest"
           grep -q 'android.permission.READ_PHONE_STATE' "$manifest"
-          if grep -q 'android.permission.READ_CALL_LOG' "$manifest"; then
-            echo "READ_CALL_LOG must not be requested (Google Play policy)"; exit 1
-          fi
+          # Talk time on Android (ADR 0006). Read only: nothing beyond the app's own calls.
+          grep -q 'android.permission.READ_CALL_LOG' "$manifest"
+          for p in WRITE_CALL_LOG READ_CONTACTS PROCESS_OUTGOING_CALLS; do
+            if grep -q "android.permission.$p" "$manifest"; then echo "$p must not be requested"; exit 1; fi
+          done

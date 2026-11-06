@@ -10,16 +10,18 @@ import { queryClient } from "@/api/queryClient";
 import { buildSession } from "@/lib/session";
 import { useAuthStore } from "@/store/auth.store";
 import { useCallStore } from "@/store/call.store";
-import { useOutcomeQueue } from "@/store/outcomeQueue.store";
+import { useCallLog } from "@/store/callLog.store";
 import { useSettingsStore } from "@/store/settings.store";
+import { useViewFilters } from "@/store/viewFilters.store";
 import { agent, jwt } from "./compass";
 
 export async function resetAppState() {
   queryClient.clear();
   useAuthStore.setState({ session: null, hydrated: false });
   useCallStore.setState({ session: null });
-  useOutcomeQueue.setState({ items: [] });
+  useCallLog.setState({ calls: [] });
   useSettingsStore.setState({ simId: null, permissionIntroSeen: false });
+  useViewFilters.setState({ byView: {}, pageSize: 20, department: null, selectedView: {} });
   await AsyncStorage.clear();
   (SecureStore as unknown as { __reset: () => void }).__reset();
 }

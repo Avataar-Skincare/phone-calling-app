@@ -1,8 +1,9 @@
 # Compass Dialer
 
 Mobile calling app for Avataar Skincare sales and support agents. Agents see their leads from
-**Compass** Smart Views, call a lead with one tap from their own phone, and record how the call
-went. The outcome is saved to Compass, exactly as if it had been entered on the web.
+**Compass** Smart Views, call a lead with one tap from their own phone, or open a WhatsApp chat
+with them. Each call is logged in Compass as a "Manual Outbound Call" with talk, ringing and total
+time ([ADR 0005](docs/decisions/0005-log-calls-as-manual-outbound-call.md), [0006](docs/decisions/0006-call-times-and-whatsapp.md)); outcomes are recorded on the Compass website.
 
 **Platforms:** Android and iOS · **Status:** in development (v1) · **Backend:** Compass
 (`leadsquared-avataar-server`)
@@ -10,12 +11,13 @@ went. The outcome is saved to Compass, exactly as if it had been entered on the 
 ## Features
 
 - Phone-number OTP login with the agent's Compass account
-- Smart View tabs (First Call, Hot Leads, Hot & Warm Tasks, …) with counts, search and paging
+- Compass Smart Views: Sales / Customer Support, all 14 views with Compass's filters, sort and paging
 - One-tap calling from the phone's SIM (instant on Android, system prompt on iPhone), SIM choice on
   dual-SIM Android phones
-- Call tracking: start, end, duration, and on iPhone whether the customer answered
-- Lead screen with stage, task, details and recent activity
-- Outcome sheet after every call, saved to Compass, with an offline queue
+- "Calling …" banner while a call is live; one call at a time
+- After each call: talk time, ringing and total shown on screen and logged in Compass (kept and retried when offline)
+- WhatsApp button next to every Call button, opening a chat with the client's number
+- Client page like Compass's opportunity page: profile, tiles, Properties, Change Stage and all tabs
 
 ## Tech stack
 
@@ -70,7 +72,6 @@ there. Full setup, including local native builds: [docs/development.md](docs/dev
 - [Architecture](docs/architecture.md)
 - [Compass API](docs/compass-api.md)
 - [Calling](docs/calling.md)
-- [Call outcomes](docs/outcomes.md)
 - [Development](docs/development.md)
 - [Testing](docs/testing.md)
 - [Release](docs/release.md)

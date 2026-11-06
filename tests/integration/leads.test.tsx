@@ -3,7 +3,8 @@
 /**
  * Integration: lead lists, search, lead screen and departments, against a fake Compass.
  */
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { Alert, type AlertButton } from "react-native";
 import { renderRouter } from "expo-router/testing-library";
 
 import { agent, fakeCompass } from "../support/compass";
@@ -16,17 +17,21 @@ beforeEach(async () => {
 });
 
 describe("lead lists", () => {
-  it("shows the first tab's tasks with masked numbers, due times and counts", async () => {
+  it("shows the first tab's tasks like Compass, with masked numbers, statuses and counts", async () => {
     const server = fakeCompass();
     signedInAs();
     renderRouter("./src/app", { initialUrl: "/" });
 
-    expect(await screen.findByText("Asha Rao")).toBeTruthy();
-    expect(screen.getByText("98•••••001 · First Call")).toBeTruthy();
-    expect(screen.getByText(/^Overdue · /)).toBeTruthy();
-    expect(screen.getByText(/^Due /)).toBeTruthy();
-    expect(screen.getByText("2 leads")).toBeTruthy();
+    expect(await screen.findByLabelText("Asha Rao, open lead")).toBeTruthy();
+    expect(screen.getByText("Smart Views")).toBeTruthy();
+    expect(screen.getByText(/98•••••001/)).toBeTruthy();
+    expect(screen.getByText("overdue")).toBeTruthy();
+    expect(screen.getByText("01/01/2020, 11:00 am")).toBeTruthy();
+    expect(screen.getByText("Showing 2 of 2")).toBeTruthy();
     expect(screen.getByRole("tab", { name: /First Call\s+2/ })).toBeTruthy();
+    // Compass's defaults for a task view
+    expect(screen.getByLabelText("Status: Pending and Overdue")).toBeTruthy();
+    expect(screen.getByLabelText("Date range: This Week")).toBeTruthy();
 
     // A lead without a number can't be called
     expect(screen.getByLabelText("Call Kiran")).toBeDisabled();
@@ -36,7 +41,10 @@ describe("lead lists", () => {
     expect(server.find("GET", "/smart-views/data")[0]?.query).toEqual({
       view: "first_call_tasks",
       page: "1",
-      limit: "25",
+      limit: "20",
+      schedule: "this_week",
+      status: "pending_and_overdue",
+      sort_order: "ASC",
     });
   });
 
@@ -44,11 +52,12 @@ describe("lead lists", () => {
     const server = fakeCompass();
     signedInAs();
     renderRouter("./src/app", { initialUrl: "/" });
-    await screen.findByText("Asha Rao");
+    await screen.findByLabelText("Asha Rao, open lead");
 
     fireEvent.press(screen.getByRole("tab", { name: /Hot Leads/ }));
-    expect(await screen.findByText("Meera Iyer")).toBeTruthy();
-    expect(screen.getByText("98•••••003 · Facebook lead ads")).toBeTruthy();
+    expect(await screen.findByLabelText("Meera Iyer, open lead")).toBeTruthy();
+    expect(screen.getByText(/98•••••003/)).toBeTruthy();
+    expect(screen.getByText(/facebook_lead_ads/)).toBeTruthy(); // sources shown as stored, like Compass
     expect(server.find("GET", "/smart-views/data").at(-1)?.query.view).toBe("hot_leads");
   });
 
@@ -56,11 +65,11 @@ describe("lead lists", () => {
     const server = fakeCompass();
     signedInAs();
     renderRouter("./src/app", { initialUrl: "/" });
-    await screen.findByText("Asha Rao");
+    await screen.findByLabelText("Asha Rao, open lead");
 
     fireEvent.changeText(screen.getByLabelText("Search leads"), "Asha");
     await waitFor(() => expect(server.find("GET", "/smart-views/data").at(-1)?.query.search).toBe("Asha"));
-    expect(await screen.findByText('2 leads matching "Asha"')).toBeTruthy();
+    expect(await screen.findByText("Showing 2 of 2")).toBeTruthy();
   });
 
   it("shows an empty state and an error state", async () => {
@@ -70,7 +79,7 @@ describe("lead lists", () => {
       body: { data: [], meta: { total: 0, page: 1, limit: 25, total_pages: 0 } },
     });
     renderRouter("./src/app", { initialUrl: "/" });
-    expect(await screen.findByText("No leads here right now")).toBeTruthy();
+    expect(await screen.findByText("No tasks found")).toBeTruthy();
 
     server.on("GET", "/smart-views/data", { status: 500, body: {} });
     fireEvent.press(screen.getByRole("tab", { name: /Hot Leads/ }));
@@ -85,47 +94,143 @@ describe("lead lists", () => {
     server.on("GET", "/smart-views/counts", { status: 504, body: {} });
     renderRouter("./src/app", { initialUrl: "/" });
 
-    expect(await screen.findByText("Asha Rao")).toBeTruthy();
+    expect(await screen.findByLabelText("Asha Rao, open lead")).toBeTruthy();
     expect(screen.getByRole("tab", { name: /^First Call$/ })).toBeTruthy(); // no count
     expect(server.find("GET", "/smart-views/counts")).toHaveLength(1); // not retried
   });
 });
 
+describe("task views", () => {
+  it("marks a task completed after the agent confirms", async () => {
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const server = fakeCompass();
+    signedInAs();
+    renderRouter("./src/app", { initialUrl: "/" });
+    await screen.findByLabelText("Asha Rao, open lead");
+
+    fireEvent.press(screen.getAllByLabelText("Mark as completed")[0]!);
+    expect(alertSpy).toHaveBeenLastCalledWith("Mark as completed?", "First call", expect.any(Array));
+    const buttons = (alertSpy.mock.calls.at(-1)?.[2] ?? []) as AlertButton[];
+    await act(async () => buttons.find((b) => b.text === "Complete")?.onPress?.());
+
+    await waitFor(() => expect(server.find("POST", "/tasks/9001/update")).toHaveLength(1));
+    expect(server.find("POST", "/tasks/9001/update")[0]?.body).toEqual({ status: "completed" });
+    // The list reloads
+    await waitFor(() => expect(server.find("GET", "/smart-views/data").length).toBeGreaterThan(1));
+    alertSpy.mockRestore();
+  });
+});
+
 describe("departments", () => {
-  it("gives a user outside Sales and CS a department switch", async () => {
+  it("opens a Central user on Sales and switches to Customer Support", async () => {
     fakeCompass();
     signedInAs({ ...agent, role: "administrator", departmentId: "3" }); // Central
     renderRouter("./src/app", { initialUrl: "/" });
 
-    expect(await screen.findByText("Asha Rao")).toBeTruthy(); // Sales by default
+    expect(await screen.findByLabelText("Asha Rao, open lead")).toBeTruthy(); // Sales by default
     fireEvent.press(screen.getByText("Customer Support"));
     expect(await screen.findByRole("tab", { name: /Complaint open/ })).toBeTruthy();
     expect(screen.queryByRole("tab", { name: /First Call/ })).toBeNull();
   });
 
-  it("doesn't show the switch to a Sales agent", async () => {
-    fakeCompass();
+  it("shows both departments to a Sales agent too, like Compass", async () => {
+    const server = fakeCompass();
     signedInAs();
     renderRouter("./src/app", { initialUrl: "/" });
-    await screen.findByText("Asha Rao");
-    expect(screen.queryByText("Customer Support")).toBeNull();
+    await screen.findByLabelText("Asha Rao, open lead");
+    fireEvent.press(screen.getByText("Customer Support"));
+    expect(await screen.findByRole("tab", { name: /Complaint open/ })).toBeTruthy();
+    await waitFor(() =>
+      expect(server.find("GET", "/smart-views/counts").at(-1)?.query).toEqual({ department: "cs" }),
+    );
   });
 });
 
 describe("lead screen", () => {
-  it("opens from the list with the full number, task and history", async () => {
+  it("opens the Compass opportunity page with profile, tiles, properties and Overview", async () => {
     const server = fakeCompass();
     signedInAs();
     renderRouter("./src/app", { initialUrl: "/" });
-    await screen.findByText("Asha Rao");
+    await screen.findByLabelText("Asha Rao, open lead");
 
     fireEvent.press(screen.getByLabelText("Asha Rao, open lead"));
 
-    expect(await screen.findByText("+91 98765 00001")).toBeTruthy();
+    expect(await screen.findByText("+91-9876500001")).toBeTruthy();
+    expect(screen.getByText("OPPORTUNITY DETAILS · SALES")).toBeTruthy();
     expect(screen.getByText(/First Call · overdue since/)).toBeTruthy();
     expect(screen.getByText("Pune")).toBeTruthy();
-    expect(screen.getByText("Lead Capture")).toBeTruthy();
+    expect(screen.getByText("Lead Score")).toBeTruthy();
+    expect(screen.getByText("40")).toBeTruthy();
+    expect(screen.getByText("Not Connected Count")).toBeTruthy();
+    expect(screen.getByText("Properties")).toBeTruthy();
+    expect(screen.getByText("Lead Source")).toBeTruthy();
+    // Overview cards load from their own endpoints
+    await waitFor(() => expect(server.find("GET", "/opportunities/7001/lead-sources")).toHaveLength(1));
+    expect(server.find("GET", "/opportunities/7001/sales-overview")).toHaveLength(1);
+    expect(server.find("GET", "/opportunities/7001/cs-overview")).toHaveLength(0); // Sales only
     expect(server.find("GET", "/opportunities/7001")).toHaveLength(1);
+  });
+
+  it("shows each tab from its Compass endpoint", async () => {
+    const server = fakeCompass();
+    signedInAs();
+    renderRouter("./src/app", { initialUrl: "/lead/7001" });
+    await screen.findByText("+91-9876500001");
+
+    fireEvent.press(screen.getByText("Activities"));
+    expect(await screen.findByText("Lead Capture")).toBeTruthy();
+    expect(server.find("GET", "/leads/501")).toHaveLength(1);
+
+    fireEvent.press(screen.getByText("Tasks"));
+    expect(await screen.findByText("No pending tasks for this opportunity")).toBeTruthy();
+    expect(server.find("GET", "/tasks").at(-1)?.query).toEqual({
+      opportunity_id: "7001",
+      status: "pending",
+      sort_by: "due_at",
+      sort_order: "ASC",
+      limit: "50",
+    });
+
+    fireEvent.press(screen.getByText("Calls"));
+    expect(await screen.findByText("No calls recorded yet.")).toBeTruthy();
+    await waitFor(() =>
+      expect(server.find("GET", "/ameyo/opportunities/7001/calls").at(-1)?.query).toEqual({
+        page: "1",
+        limit: "20",
+      }),
+    );
+
+    fireEvent.press(screen.getByText("Stage History"));
+    expect(await screen.findByText("Created at New Lead")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Purchase History"));
+    expect(await screen.findByText("No purchase history found.")).toBeTruthy();
+
+    fireEvent.press(screen.getByText("Appointments"));
+    expect(await screen.findByText("No appointments found")).toBeTruthy();
+    expect(screen.getByText("0 appointments found")).toBeTruthy();
+  });
+
+  it("changes the stage with a reason", async () => {
+    const server = fakeCompass();
+    signedInAs();
+    renderRouter("./src/app", { initialUrl: "/lead/7001" });
+    await screen.findByText("+91-9876500001");
+
+    fireEvent.press(screen.getByText("Change Stage"));
+    expect(screen.getByText("Not Interested (inactive)")).toBeTruthy();
+    expect(screen.getByText("Update Stage")).toBeDisabled(); // still the current stage
+    fireEvent.press(screen.getByText("Warm - Consultation Done"));
+    fireEvent.changeText(screen.getByLabelText("Reason"), "Consult done on call");
+    fireEvent.press(screen.getByText("Update Stage"));
+
+    await waitFor(() => expect(server.find("POST", "/opportunities/7001/stage")).toHaveLength(1));
+    expect(server.find("POST", "/opportunities/7001/stage")[0]?.body).toEqual({
+      opportunity_stage_id: "4",
+      reason: "Consult done on call",
+    });
+    // The page reloads the opportunity afterwards
+    await waitFor(() => expect(server.find("GET", "/opportunities/7001").length).toBeGreaterThan(1));
   });
 
   it("explains when the lead is no longer the agent's", async () => {
@@ -133,7 +238,7 @@ describe("lead screen", () => {
     signedInAs();
     server.on("GET", /^\/opportunities\/\d+$/, { status: 403, body: { message: "Forbidden resource" } });
     renderRouter("./src/app", { initialUrl: "/" });
-    await screen.findByText("Asha Rao");
+    await screen.findByLabelText("Asha Rao, open lead");
 
     fireEvent.press(screen.getByLabelText("Asha Rao, open lead"));
     expect(await screen.findByText("This lead isn't assigned to you any more")).toBeTruthy();

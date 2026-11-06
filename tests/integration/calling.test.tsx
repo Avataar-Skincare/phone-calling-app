@@ -1,17 +1,16 @@
 /// <reference types="jest" />
 /// <reference types="node" />
 /**
- * Integration: tap Call → phone call events → outcome sheet → saved to Compass (or queued),
- * rendering the real app with a fake Compass and the sim-dialer test double.
+ * Integration: tap Call → phone call events → banner while on the call → call summary (talk,
+ * ringing, total) after it ends, kept on the phone; and the WhatsApp button. Renders the real app with a fake Compass and the sim-dialer test double.
  */
-import { Alert, Platform } from "react-native";
+import { Alert, Linking, Platform } from "react-native";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { router } from "expo-router";
 import { renderRouter } from "expo-router/testing-library";
 
 import * as SimDialer from "@modules/sim-dialer";
+import { useCallLog } from "@/store/callLog.store";
 import { useCallStore } from "@/store/call.store";
-import { useOutcomeQueue } from "@/store/outcomeQueue.store";
 import { useSettingsStore } from "@/store/settings.store";
 import { fakeCompass } from "../support/compass";
 import { resetAppState, signedInAs } from "../support/state";
@@ -21,17 +20,10 @@ const dialer = SimDialer as typeof SimDialer & {
   __reset: () => void;
   __emit: (e: { state: string; at: number; connected?: boolean }) => void;
   __setCapabilities: (c: object) => void;
+  __setCallLog: (e: { talkSeconds: number; startedAt: number } | null) => void;
 };
 
-type AlertButton = { text?: string; onPress?: () => void };
 const alertSpy = jest.spyOn(Alert, "alert");
-/** Press a button in the most recent Alert by its label. */
-async function pressAlertButton(text: string) {
-  const buttons = (alertSpy.mock.calls.at(-1)?.[2] ?? []) as AlertButton[];
-  await act(async () => {
-    buttons.find((b) => b.text === text)?.onPress?.();
-  });
-}
 
 beforeEach(async () => {
   await resetAppState();
@@ -41,113 +33,121 @@ beforeEach(async () => {
   useSettingsStore.setState({ permissionIntroSeen: true });
 });
 
-/** Open the app, call the first lead and let the phone report a call that rang out. */
-async function callAndHangUp(server = fakeCompass()) {
+/** Open the app and call the first lead; the phone reports the call going live. */
+async function callAsha(server = fakeCompass()) {
   renderRouter("./src/app", { initialUrl: "/" });
-  await screen.findByText("Asha Rao");
+  await screen.findByLabelText("Asha Rao, open lead");
 
   fireEvent.press(screen.getByLabelText("Call Asha Rao"));
   await waitFor(() => expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null));
-
   const start = Date.now();
   act(() => dialer.__emit({ state: "offhook", at: start + 1_000 }));
   expect(await screen.findByText("Calling Asha Rao")).toBeTruthy();
-  act(() => dialer.__emit({ state: "idle", at: start + 31_000 }));
-
-  expect(await screen.findByText("How did the call go?")).toBeTruthy();
-  return server;
-}
-
-/** Fill in the Not Connected sub-form. */
-function fillNotConnected() {
-  fireEvent.press(screen.getByText("Not Connected"));
-  fireEvent.press(screen.getByText("No Answer"));
-  fireEvent.press(screen.getByText("In 1 hour"));
-  fireEvent.changeText(screen.getByTestId("field-notes"), "Rang out, will retry");
+  return { server, start };
 }
 
 describe("calling a lead", () => {
-  it("places the call, opens the outcome sheet and saves the outcome to Compass", async () => {
-    const server = await callAndHangUp();
+  it("places the call, then shows talk time, ringing and total when it ends (no form)", async () => {
+    const { server, start } = await callAsha();
+    expect(screen.getByText("Smart Views")).toBeTruthy(); // stays on the list
+    expect(screen.getByText("On the call")).toBeTruthy();
 
-    // The form loaded during the call
-    expect(server.find("GET", "/opportunities/7001/activity-form/config")).toHaveLength(1);
-    expect(screen.getByText("New Lead (now)")).toBeTruthy();
+    // Tap at ~start, ended 92 s later; the call log says the client talked for 80 s
+    dialer.__setCallLog({ talkSeconds: 80, startedAt: start });
+    act(() => dialer.__emit({ state: "idle", at: start + 92_000 }));
 
-    // Validation runs on the phone, nothing is sent
-    fireEvent.press(screen.getByText("Save to Compass"));
-    expect(screen.getByText("Pick the stage that describes this call.")).toBeTruthy();
-    fireEvent.press(screen.getByText("Not Connected"));
-    fireEvent.press(screen.getByText("Save to Compass"));
-    expect(screen.getByText("Select Outcome is required.")).toBeTruthy();
-    expect(screen.getByText("Notes is required.")).toBeTruthy();
-    expect(server.find("POST", /activity-form$/)).toHaveLength(0);
+    expect(await screen.findByText("Call to Asha Rao · Connected")).toBeTruthy();
+    expect(screen.getByText(/^Talk time 1 min 20 s · Ringing \d+ s · Total 1 min 3\d s$/)).toBeTruthy();
+    expect(screen.queryByText("How did the call go?")).toBeNull();
+    expect(useCallStore.getState().session).toBeNull();
 
-    fillNotConnected();
-    fireEvent.changeText(screen.getByTestId("outcome-note"), "Prefers evenings");
-    fireEvent.press(screen.getByText("Save to Compass"));
-
-    await waitFor(() => expect(server.find("POST", /activity-form$/)).toHaveLength(1));
-    const [save] = server.find("POST", "/opportunities/7001/activity-form");
-    expect(save?.body).toEqual({
-      stage_code: "not_connected",
-      submitted_by_user_id: "31",
-      concerns_raised: "Prefers evenings",
-      sub_form_data: expect.objectContaining({
-        select_outcome: "No Answer",
-        notes: "Rang out, will retry",
-        next_follow_up_datetime: expect.stringMatching(/^\d{4}-\d\d-\d\dT.*Z$/),
-        call_source: "mobile_app",
+    // Logged in Compass as a "Manual Outbound Call" activity (ADR 0005), and nothing else is written
+    await waitFor(() => expect(useCallLog.getState().calls[0]?.status).toBe("sent"));
+    const [call] = useCallLog.getState().calls;
+    expect(call).toMatchObject({
+      name: "Asha Rao",
+      opportunityId: "7001",
+      talkTimeSeconds: 80,
+      answered: true,
+    });
+    expect(call!.ringTimeSeconds).toBe(call!.totalDurationSeconds - 80);
+    expect(server.requests.filter((r) => r.method !== "GET").map((r) => r.path)).toEqual(["/activities/log"]);
+    expect(server.find("POST", "/activities/log")[0]?.body).toEqual({
+      phone: "9876500001",
+      activity_type: "manual_outbound_call",
+      opportunity_id: "7001",
+      data: expect.objectContaining({
+        agent_user_id: "31",
+        agent_name: "Test Agent",
+        call_talk_seconds: 80,
+        call_ring_seconds: call!.ringTimeSeconds,
+        call_duration_seconds: call!.totalDurationSeconds,
+        call_answered: "yes",
         call_platform: "android",
-        call_answered: "unknown",
-        call_duration_seconds: "30",
+        call_source: "mobile_app",
+        app_session_id: call!.id,
       }),
     });
 
-    // Back on the list, the call is cleared
-    await waitFor(() => expect(useCallStore.getState().session).toBeNull());
-    expect(await screen.findByText("My leads")).toBeTruthy();
-    expect(screen.queryByText(/Record the call to/)).toBeNull();
+    fireEvent.press(screen.getByLabelText("Close call summary"));
+    expect(screen.queryByText("Call to Asha Rao · Connected")).toBeNull();
   });
 
-  it("keeps the outcome on the phone when Compass can't be reached, then sends it", async () => {
-    const server = await callAndHangUp();
-    server.on("POST", /activity-form$/, "network-error");
-
-    fillNotConnected();
-    fireEvent.press(screen.getByText("Save to Compass"));
-
-    await waitFor(() => expect(alertSpy).toHaveBeenCalledWith("Saved on your phone", expect.any(String)));
-    expect(useOutcomeQueue.getState().items).toHaveLength(1);
-    expect(await screen.findByText("1 outcome waiting to send")).toBeTruthy();
-
-    // Compass is back: the agent retries from the "Waiting to send" screen
-    server.on("POST", /activity-form$/, { status: 201, body: { success: true } });
-    fireEvent.press(screen.getByText("1 outcome waiting to send"));
-    expect(await screen.findByText("Waiting to send")).toBeTruthy();
-    fireEvent.press(screen.getByText("Retry now"));
-
-    expect(await screen.findByText("All sent")).toBeTruthy();
-    expect(useOutcomeQueue.getState().items).toEqual([]);
+  it("says when the client didn't answer", async () => {
+    const { start } = await callAsha();
+    dialer.__setCallLog({ talkSeconds: 0, startedAt: start });
+    act(() => dialer.__emit({ state: "idle", at: start + 31_000 }));
+    expect(await screen.findByText("Call to Asha Rao · Not answered")).toBeTruthy();
+    expect(screen.getByText(/^Rang for 3\d s$/)).toBeTruthy();
   });
 
-  it("shows why Compass refused it and lets the agent discard a lead that was reassigned", async () => {
-    const server = await callAndHangUp();
-    server.on("POST", /activity-form$/, { status: 403, body: { message: "Forbidden resource" } });
-
-    fillNotConnected();
-    fireEvent.press(screen.getByText("Save to Compass"));
-
-    expect(await screen.findByText(/isn't assigned to you any more/)).toBeTruthy();
-    expect(screen.queryByText("Save to Compass")).toBeNull();
-    expect(useOutcomeQueue.getState().items).toEqual([]); // never queued
-
-    fireEvent.press(screen.getByText("Didn't call"));
-    expect(alertSpy).toHaveBeenLastCalledWith("Discard this call?", expect.any(String), expect.any(Array));
-    await pressAlertButton("Discard");
+  it("lets the agent call the next lead straight after", async () => {
+    const { start } = await callAsha();
+    dialer.__setCallLog({ talkSeconds: 5, startedAt: start });
+    act(() => dialer.__emit({ state: "idle", at: start + 31_000 }));
     await waitFor(() => expect(useCallStore.getState().session).toBeNull());
-    // The sheet closes itself and the agent is back on the list
-    expect(await screen.findByText("My leads")).toBeTruthy();
+
+    (dialer.placeCall as jest.Mock).mockClear();
+    fireEvent.press(screen.getByLabelText("Call Asha Rao"));
+    await waitFor(() => expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null));
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it("records a call that ended while the app was closed", async () => {
+    fakeCompass();
+    const now = Date.now();
+    useCallStore.setState({
+      session: {
+        id: "s1",
+        name: "Asha Rao",
+        phone: "+919876500001",
+        opportunityId: "7001",
+        leadId: "501",
+        taskId: "9001",
+        platform: "android",
+        tracked: true,
+        mode: "direct",
+        simId: null,
+        status: "in_call",
+        tappedAt: now - 60_000,
+        startedAt: now - 59_000,
+        connectedAt: null,
+        endedAt: null,
+        connected: null,
+        endApproximate: false,
+      },
+    });
+    // The phone is no longer in a call (the mock reports "idle")
+
+    renderRouter("./src/app", { initialUrl: "/" });
+    await screen.findByLabelText("Asha Rao, open lead");
+    // The end was missed, so it's approximate; the call log isn't there either → total only
+    // (After "Getting call details…", while the app looks for the call-log entry)
+    expect(await screen.findByText(/Talk time isn't available/, {}, { timeout: 8_000 })).toBeTruthy();
+    expect(screen.getByText("Call to Asha Rao ended")).toBeTruthy();
+    expect(useCallLog.getState().calls[0]).toMatchObject({ approximate: true, talkTimeSeconds: null });
+    expect(useCallStore.getState().session).toBeNull();
+    expect(screen.queryByText("How did the call go?")).toBeNull();
   });
 
   it("asks for the phone permissions once before the first call (Android)", async () => {
@@ -156,7 +156,7 @@ describe("calling a lead", () => {
     fakeCompass();
     useSettingsStore.setState({ permissionIntroSeen: false });
     renderRouter("./src/app", { initialUrl: "/" });
-    await screen.findByText("Asha Rao");
+    await screen.findByLabelText("Asha Rao, open lead");
 
     fireEvent.press(screen.getByLabelText("Call Asha Rao"));
     expect(await screen.findByText("Allow calling from the app")).toBeTruthy();
@@ -173,87 +173,103 @@ describe("calling a lead", () => {
     fakeCompass();
     useSettingsStore.setState({ permissionIntroSeen: false });
     renderRouter("./src/app", { initialUrl: "/" });
-    await screen.findByText("Asha Rao");
+    await screen.findByLabelText("Asha Rao, open lead");
 
     fireEvent.press(screen.getByLabelText("Call Asha Rao"));
     await waitFor(() => expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null));
     expect(screen.queryByText("Allow calling from the app")).toBeNull();
   });
+});
 
-  it("restores an unsaved call after the app restarts", async () => {
-    fakeCompass();
-    const now = Date.now();
-    useCallStore.setState({
-      session: {
-        id: "s1",
-        name: "Asha Rao",
-        phone: "+919876500001",
-        opportunityId: "7001",
-        leadId: "501",
-        taskId: "9001",
-        platform: "android",
-        tracked: true,
-        mode: "direct",
-        simId: null,
-        status: "ended",
-        tappedAt: now - 60_000,
-        startedAt: now - 59_000,
-        connectedAt: null,
-        endedAt: now - 30_000,
-        connected: null,
-        endApproximate: false,
+describe("saving calls to Compass", () => {
+  it("shows when Compass refuses the call log, and lets the agent retry", async () => {
+    const server = fakeCompass();
+    server.on("POST", "/activities/log", {
+      body: {
+        lead_id: null,
+        activity_id: null,
+        lead_created: false,
+        message: 'Activity type "manual_outbound_call" not found',
       },
     });
+    const { start } = await callAsha(server);
+    dialer.__setCallLog({ talkSeconds: 0, startedAt: start });
+    act(() => dialer.__emit({ state: "idle", at: start + 20_000 }));
 
-    renderRouter("./src/app", { initialUrl: "/" });
-    expect(await screen.findByText("How did the call go?")).toBeTruthy();
-    expect(screen.getByText("Asha Rao")).toBeTruthy();
+    expect(await screen.findByText("1 call couldn't be saved to Compass")).toBeTruthy();
+    fireEvent.press(screen.getByText("1 call couldn't be saved to Compass"));
+    expect(alertSpy).toHaveBeenLastCalledWith(
+      "1 call not saved to Compass",
+      'Activity type "manual_outbound_call" not found',
+      expect.any(Array),
+    );
+
+    // Fixed in Compass: Retry sends it
+    server.on("POST", "/activities/log", {
+      body: { lead_id: "501", activity_id: "8002", lead_created: false, message: "" },
+    });
+    const buttons = (alertSpy.mock.calls.at(-1)?.[2] ?? []) as { text?: string; onPress?: () => void }[];
+    await act(async () => buttons.find((b) => b.text === "Retry")?.onPress?.());
+    await waitFor(() => expect(useCallLog.getState().calls[0]?.status).toBe("sent"));
+    expect(screen.queryByText(/couldn't be saved to Compass/)).toBeNull();
+  });
+
+  it("keeps the call when offline and shows it's waiting", async () => {
+    const server = fakeCompass();
+    server.on("POST", "/activities/log", "network-error");
+    const { start } = await callAsha(server);
+    dialer.__setCallLog({ talkSeconds: 12, startedAt: start });
+    act(() => dialer.__emit({ state: "idle", at: start + 20_000 }));
+
+    expect(await screen.findByText("1 call waiting to save to Compass")).toBeTruthy();
+    expect(useCallLog.getState().calls[0]).toMatchObject({
+      status: "pending",
+      attempts: 1,
+      talkTimeSeconds: 12,
+    });
   });
 });
 
 describe("guards", () => {
-  it("blocks a new call while the last outcome is unsaved", async () => {
-    await callAndHangUp();
-    // Go back to the list without saving (the sheet ignores Back; use the router directly)
-    await act(async () => router.back());
-    await screen.findByText(/Record the call to Asha Rao/);
-
+  it("asks before starting a second call while one is still live", async () => {
+    await callAsha();
     (dialer.placeCall as jest.Mock).mockClear();
     fireEvent.press(screen.getByLabelText("Call Asha Rao"));
-    await waitFor(() =>
-      expect(alertSpy).toHaveBeenLastCalledWith(
-        "Save the last call first",
-        expect.any(String),
-        expect.any(Array),
-      ),
-    );
+    expect(alertSpy).toHaveBeenLastCalledWith("A call is still open", expect.any(String), expect.any(Array));
     expect(dialer.placeCall).not.toHaveBeenCalled();
   });
+});
 
-  it("asks before logging out with outcomes still waiting to send", async () => {
+describe("WhatsApp", () => {
+  it("opens a WhatsApp chat with the lead's number from the list and from their page", async () => {
+    const openURL = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
     fakeCompass();
-    useOutcomeQueue.setState({
-      items: [
-        {
-          id: "q1",
-          userId: "31",
-          opportunityId: "7001",
-          leadName: "Asha Rao",
-          payload: { stage_code: "not_connected", submitted_by_user_id: "31" },
-          createdAt: Date.now(),
-          attempts: 1,
-          nextAttemptAt: Date.now() + 600_000,
-          status: "pending",
-          lastError: "Can't reach Compass",
-        },
-      ],
-    });
-    renderRouter("./src/app", { initialUrl: "/settings" });
-    fireEvent.press(await screen.findByText("Log out"));
-    expect(alertSpy).toHaveBeenLastCalledWith(
-      "Outcomes still waiting to send",
-      expect.stringMatching(/1 outcome hasn't reached Compass/),
-      expect.any(Array),
+    renderRouter("./src/app", { initialUrl: "/" });
+    await screen.findByLabelText("Asha Rao, open lead");
+
+    fireEvent.press(screen.getByLabelText("WhatsApp Asha Rao"));
+    expect(openURL).toHaveBeenLastCalledWith("https://wa.me/919876500001");
+    // No number, no WhatsApp
+    expect(screen.getByLabelText("WhatsApp Kiran")).toBeDisabled();
+
+    fireEvent.press(screen.getByLabelText("Asha Rao, open lead"));
+    await screen.findByText("+91-9876500001");
+    fireEvent.press(screen.getByLabelText("WhatsApp Asha Rao"));
+    expect(openURL).toHaveBeenLastCalledWith("https://wa.me/919876500001");
+    expect(dialer.placeCall).not.toHaveBeenCalled();
+    openURL.mockRestore();
+  });
+
+  it("explains when WhatsApp can't be opened", async () => {
+    const openURL = jest.spyOn(Linking, "openURL").mockRejectedValue(new Error("no handler"));
+    fakeCompass();
+    renderRouter("./src/app", { initialUrl: "/" });
+    await screen.findByLabelText("Asha Rao, open lead");
+
+    fireEvent.press(screen.getByLabelText("WhatsApp Asha Rao"));
+    await waitFor(() =>
+      expect(alertSpy).toHaveBeenLastCalledWith("Couldn't open WhatsApp", expect.any(String)),
     );
+    openURL.mockRestore();
   });
 });

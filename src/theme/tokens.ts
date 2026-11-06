@@ -46,3 +46,33 @@ export const TYPE = {
 export function useColors(): Colors {
   return useColorScheme() === "dark" ? dark : light;
 }
+
+/** Stage colours (Compass's stage tones), as [text, background] for light and dark. */
+const TONES_LIGHT = {
+  red: ["#A8261D", "#F8E1DE"],
+  brand: ["#0B7A6E", "#DFF1EE"],
+  gray: ["#55666F", "#E8EDF0"],
+  cyan: ["#0E6E85", "#DDF2F7"],
+  amber: ["#9A5508", "#FBEBD6"],
+  orange: ["#B4470E", "#FDE6D7"],
+  green: ["#1F7A35", "#DFF3E4"],
+  purple: ["#6B3FA0", "#EEE5F8"],
+  yellow: ["#7C6400", "#FBF3CC"],
+} as const;
+const TONES_DARK: Record<keyof typeof TONES_LIGHT, readonly [string, string]> = {
+  red: ["#F08A80", "#3A1916"],
+  brand: ["#3CC2B0", "#12302C"],
+  gray: ["#94A5AD", "#1E2A31"],
+  cyan: ["#6CCFE6", "#10303A"],
+  amber: ["#E8A24C", "#33250F"],
+  orange: ["#F2A06A", "#3A2010"],
+  green: ["#7BD38F", "#123020"],
+  purple: ["#C3A3EC", "#2A1C3D"],
+  yellow: ["#E4CF63", "#332B0C"],
+};
+export type Tone = keyof typeof TONES_LIGHT;
+
+export function useTone(tone: Tone): { fg: string; bg: string } {
+  const pair = (useColorScheme() === "dark" ? TONES_DARK : TONES_LIGHT)[tone];
+  return { fg: pair[0], bg: pair[1] };
+}

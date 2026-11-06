@@ -7,7 +7,7 @@
  * Compass testing responses, names and numbers made up). Every request is recorded so tests can
  * assert exactly what the app sent. Override any route per test with `server.on(...)`.
  */
-import type { ActivityFormConfig, OpportunityDetail, SmartViewDef, VerifyOtpResponse } from "@/types/compass";
+import type { OpportunityDetail, SmartViewDef, VerifyOtpResponse } from "@/types/compass";
 
 export const API = "https://test-leads.avataarskin.com/api";
 
@@ -98,6 +98,27 @@ export const opportunity = (id = "7001"): OpportunityDetail => ({
   },
   created_at: "2026-11-01T05:30:00.000Z",
   updated_at: "2026-11-01T05:30:00.000Z",
+  available_stages: [
+    { id: "1", code: "new_lead", label: "New Lead", stage_type: "active", sort_order: 10 },
+    {
+      id: "4",
+      code: "warm_consultation_done",
+      label: "Warm - Consultation Done",
+      stage_type: "active",
+      sort_order: 40,
+    },
+    { id: "9", code: "not_interested", label: "Not Interested", stage_type: "inactive", sort_order: 90 },
+  ],
+  stage_history: [
+    {
+      id: "1",
+      from_stage: null,
+      to_stage: { id: "1", label: "New Lead" },
+      changed_by: null,
+      changed_at: "2026-11-01T05:30:00.000Z",
+      reason: null,
+    },
+  ],
   activities: [
     {
       id: "1",
@@ -112,59 +133,6 @@ export const opportunity = (id = "7001"): OpportunityDetail => ({
     },
   ],
   total_activities: 1,
-});
-
-export const formConfig = (opportunityId = "7001"): ActivityFormConfig => ({
-  opportunity_id: opportunityId,
-  opportunity_name: null,
-  department_code: "sales",
-  department_label: "Sales",
-  current_stage_code: "new_lead",
-  lead_data: {
-    lead_id: "501",
-    first_name: "Asha",
-    email: null,
-    phone_number: "9876500001",
-    whatsapp_number: null,
-    gender: null,
-    city: null,
-  },
-  available_stages: [
-    { id: "1", code: "new_lead", label: "New Lead", stage_type: "active", sort_order: 10 },
-    { id: "2", code: "not_connected", label: "Not Connected", stage_type: "active", sort_order: 20 },
-    { id: "9", code: "not_interested", label: "Not Interested", stage_type: "inactive", sort_order: 90 },
-  ],
-  form_configs: {
-    new_lead: { sub_form_name: null, activity_type_code: null, top_level_fields: [], sub_form_fields: [] },
-    not_connected: {
-      sub_form_name: "Phone Call Not Connected",
-      activity_type_code: "phone_call_not_connected",
-      top_level_fields: [],
-      sub_form_fields: [
-        {
-          key: "select_outcome",
-          label: "Select Outcome",
-          type: "dropdown",
-          required: true,
-          options: ["Busy", "No Answer"],
-        },
-        {
-          key: "next_follow_up_datetime",
-          label: "Next Follow Up",
-          type: "datetime",
-          required: true,
-          options: null,
-        },
-        { key: "notes", label: "Notes", type: "text", required: true, options: null },
-      ],
-    },
-    not_interested: {
-      sub_form_name: null,
-      activity_type_code: null,
-      top_level_fields: [],
-      sub_form_fields: [],
-    },
-  },
 });
 
 // ── Fake server ─────────────────────────────────────────────
@@ -205,10 +173,48 @@ export function fakeCompass() {
     return { body: { data: rows, meta: { total: rows.length, page: 1, limit: 25, total_pages: 1 } } };
   });
   on("GET", /^\/opportunities\/\d+$/, (req) => ({ body: opportunity(req.path.split("/").pop()) }));
-  on("GET", /^\/opportunities\/\d+\/activity-form\/config$/, (req) => ({
-    body: formConfig(req.path.split("/")[2]),
+
+  // Smart View filter options
+  on("GET", "/smart-views/opportunity-stages", { body: [] });
+  on("GET", "/settings/sources/dropdown", { body: [] });
+  on("GET", "/agents/dropdown", { body: [] });
+
+  // Opportunity page: empty but correctly shaped, so every card shows its empty text
+  const empty = (limit = 20) => ({ data: [], meta: { total: 0, page: 1, limit, total_pages: 0 } });
+  on("GET", /^\/opportunities\/\d+\/lead-sources$/, { body: { lead_sources: [] } });
+  on("GET", /^\/opportunities\/\d+\/sales-overview$/, {
+    body: { haut_ai: [], last_add_to_cart: null, recent_photos: [], skin_analysis_report: null },
+  });
+  on("GET", /^\/opportunities\/\d+\/cs-overview$/, {
+    body: { complaints: [], escalated_status: "No", address: null, rm_name: null },
+  });
+  on("GET", /^\/opportunities\/\d+\/recent-whatsapp$/, { body: { messages: [] } });
+  on("GET", /^\/leads\/\d+\/virtual-consultations$/, { body: { data: [] } });
+  on("GET", /^\/leads\/\d+\/package-details$/, { body: { packages: [] } });
+  on("GET", /^\/leads\/\d+\/recent-service$/, {
+    body: { data: { last_completed_session: null, next_appointment: null } },
+  });
+  on("GET", /^\/leads\/\d+\/latest-sessions$/, { body: { data: [] } });
+  on("GET", /^\/leads\/\d+\/purchase-history$/, { body: { data: [] } });
+  on("GET", /^\/leads\/\d+\/appointments$/, { body: empty(10) });
+  on("GET", /^\/leads\/\d+$/, { body: { activities: opportunity().activities, total_activities: 1 } });
+  on("GET", /^\/ameyo\/opportunities\/\d+\/calls$/, { body: empty() });
+  on("GET", "/tasks", { body: empty(50) });
+  on("POST", /^\/opportunities\/\d+\/stage$/, (req) => ({
+    status: 201,
+    body: opportunity(req.path.split("/")[2]),
   }));
-  on("POST", /^\/opportunities\/\d+\/activity-form$/, { status: 201, body: { success: true } });
+  on("POST", /^\/tasks\/\d+\/update$/, { status: 201, body: { success: true } });
+
+  // Call log (ADR 0005). Like the real one: 200 with activity_id, or 200 with activity_id null.
+  on("POST", "/activities/log", {
+    body: {
+      lead_id: "501",
+      activity_id: "8001",
+      lead_created: false,
+      message: "Activity logged successfully",
+    },
+  });
 
   const fetchMock = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));

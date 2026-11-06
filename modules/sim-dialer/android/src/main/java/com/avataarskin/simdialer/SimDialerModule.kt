@@ -10,6 +10,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.provider.CallLog
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.telephony.PhoneStateListener
@@ -32,7 +33,9 @@ import expo.modules.kotlin.modules.ModuleDefinition
  *
  * Call state comes from TelephonyCallback (Android 12+, needs READ_PHONE_STATE) or
  * PhoneStateListener (older). Android reports IDLE / OFFHOOK / RINGING only: it cannot tell whether
- * the other side answered, and OFFHOOK starts while the outgoing call is still ringing.
+ * the other side answered, and OFFHOOK starts while the outgoing call is still ringing. Talk time
+ * therefore comes from the call log after the call (READ_CALL_LOG): its DURATION is the time
+ * after the other side answered, 0 when they didn't.
  */
 class SimDialerModule : Module() {
   private val context: Context
@@ -71,6 +74,7 @@ class SimDialerModule : Module() {
         "canDirectDial" to isGranted(Manifest.permission.CALL_PHONE),
         "canTrack" to (listener != null),
         "canChooseSim" to isGranted(Manifest.permission.READ_PHONE_STATE),
+        "canReadCallLog" to isGranted(Manifest.permission.READ_CALL_LOG),
       )
     }
 
@@ -86,6 +90,11 @@ class SimDialerModule : Module() {
 
     AsyncFunction("placeCall") { number: String, simId: String? ->
       placeCall(number, simId)
+    }
+
+    /** Latest outgoing call to `number` placed at or after `sinceMs`, from the call log; null if none. */
+    AsyncFunction("lastCallFromLog") { number: String, sinceMs: Double ->
+      lastCallFromLog(number, sinceMs)
     }
   }
 
@@ -224,10 +233,44 @@ class SimDialerModule : Module() {
     return "dialer"
   }
 
+  // ── Call log ───────────────────────────────────────────────────────────────────────────────
+
+  /**
+   * {talkSeconds, startedAt} of the newest outgoing call to `number` since `sinceMs`. Numbers are
+   * compared on their last 10 digits ("+91 98765 00001" = "09876500001"). The system writes the
+   * entry a moment after the call ends, so the caller retries briefly when this returns null.
+   */
+  private fun lastCallFromLog(number: String, sinceMs: Double): Map<String, Any>? {
+    if (!isGranted(Manifest.permission.READ_CALL_LOG)) return null
+    val want = number.filter { it.isDigit() }.takeLast(10)
+    if (want.isEmpty()) return null
+    return try {
+      context.contentResolver.query(
+        CallLog.Calls.CONTENT_URI,
+        arrayOf(CallLog.Calls.NUMBER, CallLog.Calls.DATE, CallLog.Calls.DURATION),
+        "${CallLog.Calls.TYPE} = ? AND ${CallLog.Calls.DATE} >= ?",
+        arrayOf(CallLog.Calls.OUTGOING_TYPE.toString(), sinceMs.toLong().toString()),
+        "${CallLog.Calls.DATE} DESC",
+      )?.use { c ->
+        var found: Map<String, Any>? = null
+        while (found == null && c.moveToNext()) {
+          val n = (c.getString(0) ?: "").filter { it.isDigit() }.takeLast(10)
+          if (n == want) {
+            found = mapOf("talkSeconds" to c.getLong(2).toDouble(), "startedAt" to c.getLong(1).toDouble())
+          }
+        }
+        found
+      }
+    } catch (e: SecurityException) {
+      null
+    }
+  }
+
   companion object {
     private val PERMISSIONS = arrayOf(
       Manifest.permission.CALL_PHONE,
       Manifest.permission.READ_PHONE_STATE,
+      Manifest.permission.READ_CALL_LOG,
     )
   }
 }

@@ -19,10 +19,12 @@ describe("sim-dialer without the native module", () => {
       canDirectDial: false,
       canTrack: false,
       canChooseSim: false,
+      canReadCallLog: false,
     });
     await expect(SimDialer.startTracking()).resolves.toBe(false);
     await expect(SimDialer.getCallState()).resolves.toBe("unknown");
     await expect(SimDialer.listSims()).resolves.toEqual([]);
+    await expect(SimDialer.getLastCallFromLog("+919876500001", 0)).resolves.toBeNull();
   });
 
   it("dials with a tel: link", async () => {

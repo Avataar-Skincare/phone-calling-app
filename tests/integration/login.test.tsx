@@ -37,16 +37,16 @@ describe("login", () => {
 
     fireEvent.changeText(screen.getByTestId("otp-input"), "1234");
 
-    await screen.findByText("My leads");
+    await screen.findByText("Smart Views");
     expect(server.find("POST", "/auth/verify-otp")[0]?.body).toEqual({ token: "otp-token", otp: "1234" });
     expect(useAuthStore.getState().session?.user.name).toBe("Test Agent");
 
     // Lists: tabs for the agent's department, rows from the first tab
-    expect(await screen.findByText("Asha Rao")).toBeTruthy();
+    expect(await screen.findByLabelText("Asha Rao, open lead")).toBeTruthy();
     expect(screen.getByRole("tab", { name: /First Call/ })).toBeTruthy();
     expect(screen.getByRole("tab", { name: /Hot Leads/ })).toBeTruthy();
-    expect(screen.queryByRole("tab", { name: /Complaint open/ })).toBeNull(); // CS tab hidden for a Sales agent
-    expect(screen.getByText(/Overdue ·/)).toBeTruthy();
+    expect(screen.queryByRole("tab", { name: /Complaint open/ })).toBeNull(); // Sales tabs first
+    expect(screen.getByText("overdue")).toBeTruthy();
   });
 
   it("blocks a number that isn't an Indian mobile", async () => {
@@ -90,7 +90,7 @@ describe("login", () => {
     expect(useAuthStore.getState().session).toBeNull();
 
     fireEvent.changeText(screen.getByTestId("otp-input"), "1234");
-    await screen.findByText("My leads");
+    await screen.findByText("Smart Views");
   });
 
   it("tells the agent when the code has expired", async () => {

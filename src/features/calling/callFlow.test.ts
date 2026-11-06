@@ -1,19 +1,23 @@
 /// <reference types="jest" />
 /// <reference types="node" />
 /**
- * Integration: placing a call wires the native module, the call store and the outcome form.
+ * Integration: placing a call wires the native module and the call store; finishing a call records
+ * its talk, ringing and total time.
  */
 import * as SimDialer from "@modules/sim-dialer";
+import { applyCallEvent, createSession, type CallSession } from "@/lib/callState";
+import { useCallLog } from "@/store/callLog.store";
 import { useCallStore } from "@/store/call.store";
 import { useSettingsStore } from "@/store/settings.store";
 import { fakeCompass } from "../../../tests/support/compass";
 import { resetAppState, signedInAs } from "../../../tests/support/state";
-import { startCall } from "./callFlow";
+import { CALL_LOG_ATTEMPTS, finishCall, startCall } from "./callFlow";
 
 jest.mock("@modules/sim-dialer");
 const dialer = SimDialer as typeof SimDialer & {
   __reset: () => void;
   __setCapabilities: (c: object) => void;
+  __setCallLog: (e: { talkSeconds: number; startedAt: number } | null) => void;
 };
 
 const target = {
@@ -60,13 +64,6 @@ describe("startCall", () => {
     expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null);
   });
 
-  it("loads the outcome form during the call", async () => {
-    const server = fakeCompass();
-    await startCall(target);
-    await new Promise((r) => setTimeout(r, 0));
-    expect(server.find("GET", "/opportunities/7001/activity-form/config")).toHaveLength(1);
-  });
-
   it("removes the session again if dialing fails", async () => {
     fakeCompass();
     (dialer.placeCall as jest.Mock).mockRejectedValueOnce(
@@ -81,5 +78,104 @@ describe("startCall", () => {
     dialer.__setCapabilities({ canTrack: false, canDirectDial: false });
     await startCall(target);
     expect(useCallStore.getState().session).toMatchObject({ tracked: false, mode: "dialer" });
+  });
+});
+
+describe("finishCall", () => {
+  const T = 1_800_000_000_000;
+  beforeEach(() => {
+    fakeCompass();
+  });
+  /** A call tapped at T, dialing at T+1 s, ended at T+`endS` s (so total = endS − 1). */
+  function ended(platform: "android" | "ios", endS: number, answerS?: number): CallSession {
+    let s = createSession(target, { platform, tracked: true, simId: null, now: T, id: "c1" });
+    if (platform === "android") {
+      s = applyCallEvent(s, { state: "offhook", at: T + 1_000 });
+      s = applyCallEvent(s, { state: "idle", at: T + endS * 1_000 });
+    } else {
+      s = applyCallEvent(s, { state: "dialing", at: T + 1_000 });
+      if (answerS !== undefined) s = applyCallEvent(s, { state: "connected", at: T + answerS * 1_000 });
+      s = applyCallEvent(s, { state: "ended", at: T + endS * 1_000, connected: answerS !== undefined });
+    }
+    useCallStore.getState().start(s);
+    return s;
+  }
+
+  it("Android: takes talk time from the call log; ringing = total − talk", async () => {
+    dialer.__setCallLog({ talkSeconds: 80, startedAt: T + 500 });
+    await finishCall(ended("android", 100));
+
+    expect(dialer.getLastCallFromLog).toHaveBeenCalledWith("+919876500001", T - 5_000);
+    expect(useCallLog.getState().calls[0]).toMatchObject({
+      id: "c1",
+      userId: "31",
+      name: "Asha Rao",
+      opportunityId: "7001",
+      taskId: "9001",
+      totalDurationSeconds: 99,
+      talkTimeSeconds: 80,
+      ringTimeSeconds: 19,
+      answered: true,
+    });
+    expect(useCallStore.getState().session).toBeNull();
+  });
+
+  it("Android: a call log entry with 0 s talk time is a call that wasn't answered", async () => {
+    dialer.__setCallLog({ talkSeconds: 0, startedAt: T + 500 });
+    await finishCall(ended("android", 35));
+    expect(useCallLog.getState().calls[0]).toMatchObject({
+      totalDurationSeconds: 34,
+      talkTimeSeconds: 0,
+      ringTimeSeconds: 34,
+      answered: false,
+    });
+  });
+
+  it("Android: waits for the call log entry, then keeps the total only if it never appears", async () => {
+    jest.useFakeTimers();
+    try {
+      const done = finishCall(ended("android", 60));
+      await jest.advanceTimersByTimeAsync(10_000);
+      await done;
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(dialer.getLastCallFromLog).toHaveBeenCalledTimes(CALL_LOG_ATTEMPTS);
+    expect(useCallLog.getState().calls[0]).toMatchObject({
+      totalDurationSeconds: 59,
+      talkTimeSeconds: null,
+      ringTimeSeconds: null,
+      answered: null,
+    });
+    expect(useCallStore.getState().session).toBeNull();
+  });
+
+  it("iOS: uses the answer time the phone reported, no call log", async () => {
+    await finishCall(ended("ios", 200, 9));
+    expect(dialer.getLastCallFromLog).not.toHaveBeenCalled();
+    expect(useCallLog.getState().calls[0]).toMatchObject({
+      totalDurationSeconds: 199,
+      talkTimeSeconds: 191,
+      ringTimeSeconds: 8,
+      answered: true,
+    });
+  });
+
+  it("records each call once and leaves a newer call alone", async () => {
+    dialer.__setCallLog({ talkSeconds: 10, startedAt: T });
+    const first = ended("android", 30);
+    const next = { ...first, id: "c2", status: "in_call" as const };
+    const running = finishCall(first);
+    useCallStore.getState().start(next); // the agent already dialed the next lead
+    await Promise.all([running, finishCall(first)]);
+
+    expect(useCallLog.getState().calls).toHaveLength(1);
+    expect(useCallStore.getState().session?.id).toBe("c2");
+  });
+
+  it("ignores a call that hasn't ended", async () => {
+    const s = createSession(target, { platform: "android", tracked: true, simId: null, now: T, id: "c3" });
+    await finishCall(s);
+    expect(useCallLog.getState().calls).toEqual([]);
   });
 });

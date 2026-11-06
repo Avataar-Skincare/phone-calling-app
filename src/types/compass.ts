@@ -87,6 +87,8 @@ export interface LeadViewRow {
   created_at?: string | null;
   updated_at?: string | null;
   cs_missed_at?: string | null;
+  /** important_customers only */
+  last_important_activity?: { code: string; occurred_at: string } | null;
 }
 
 /** Row of a task-type view (first_call_tasks, hot_and_warm_tasks, …). */
@@ -106,6 +108,7 @@ export interface TaskViewRow {
     primary_phone: string | null;
   } | null;
   assigned_to: (IdName & { extension?: string | null }) | null;
+  created_by?: IdName | null;
   opportunity_id: string | number | null;
   opportunity_stage: CodeLabel | null;
   department: CodeLabel | null;
@@ -146,65 +149,10 @@ export interface OpportunityDetail {
   } | null;
   created_at: string;
   updated_at: string;
+  available_stages?: import("./opportunityPage").AvailableStage[];
+  stage_history?: import("./opportunityPage").StageHistoryEntry[];
   activities: ActivityItem[];
   total_activities: number;
-}
-
-// ── Opportunity activity form (call outcome) ────────────────
-
-export type FormFieldType = "text" | "number" | "datetime" | "dropdown";
-
-export interface FormField {
-  key: string;
-  label: string;
-  type: FormFieldType;
-  required: boolean;
-  options: string[] | null;
-}
-
-export interface StageFormConfig {
-  sub_form_name: string | null;
-  /** null = choosing this stage logs no activity, only the stage change. */
-  activity_type_code: string | null;
-  top_level_fields: FormField[];
-  sub_form_fields: FormField[];
-}
-
-export interface FormStage {
-  id: string | number;
-  code: string;
-  label: string;
-  stage_type: string;
-  sort_order: number;
-}
-
-/** GET /opportunities/:id/activity-form/config */
-export interface ActivityFormConfig {
-  opportunity_id: string | number;
-  opportunity_name: string | null;
-  department_code: string;
-  department_label: string;
-  current_stage_code: string;
-  lead_data: {
-    lead_id: string | number;
-    first_name: string | null;
-    email: string | null;
-    phone_number: string | null;
-    whatsapp_number: string | null;
-    gender: string | null;
-    city: string | null;
-  };
-  available_stages: FormStage[];
-  form_configs: Record<string, StageFormConfig>;
-}
-
-/** POST /opportunities/:id/activity-form */
-export interface ActivityFormPayload {
-  stage_code: string;
-  submitted_by_user_id: string;
-  concerns_raised?: string;
-  top_level_data?: Record<string, string | number>;
-  sub_form_data?: Record<string, string | number>;
 }
 
 /** Error body NestJS returns for HttpException. */

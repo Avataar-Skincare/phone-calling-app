@@ -56,3 +56,13 @@ export function formatPhone(phone: string | null | undefined): string {
   }
   return e164;
 }
+
+/**
+ * WhatsApp chat link for a number: "https://wa.me/919876500001". Opens the WhatsApp app (or its
+ * web page when the app isn't installed) on Android and iOS, without extra app permissions.
+ * null when the number can't be dialed.
+ */
+export function whatsAppUrl(phone: string | null | undefined): string | null {
+  const e164 = toE164(phone);
+  return e164 ? `https://wa.me/${e164.slice(1)}` : null;
+}

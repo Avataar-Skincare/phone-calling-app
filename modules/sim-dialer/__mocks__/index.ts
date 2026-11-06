@@ -6,6 +6,7 @@
  * with `__emit({ state, at })`, exactly as the native module would, and inspect `placeCall` calls.
  */
 import type {
+  CallLogEntry,
   CallStateEvent,
   DialerCapabilities,
   NativeCallState,
@@ -17,12 +18,16 @@ import type {
 type Listener = (e: CallStateEvent) => void;
 const listeners = new Set<Listener>();
 
-let capabilities: DialerCapabilities = {
+const ANDROID: DialerCapabilities = {
   platform: "android",
   canDirectDial: true,
   canTrack: true,
   canChooseSim: true,
+  canReadCallLog: true,
 };
+let capabilities: DialerCapabilities = { ...ANDROID };
+/** What the call log returns for the next lookups; null = no entry (yet). */
+let callLog: CallLogEntry | null = null;
 let permissions: PermissionResponse = { status: "granted", granted: true, canAskAgain: true };
 let callState: NativeCallState | "unknown" = "idle";
 let sims: Sim[] = [{ id: "sim-1", label: "Jio" }];
@@ -38,6 +43,7 @@ export const listSims = jest.fn(async () => sims);
 export const placeCall = jest.fn(async (_e164: string, _simId?: string | null): Promise<PlaceCallResult> =>
   capabilities.canDirectDial ? "direct" : "dialer",
 );
+export const getLastCallFromLog = jest.fn(async (_e164: string, _sinceMs: number) => callLog);
 export const addCallStateListener = jest.fn((l: Listener) => {
   listeners.add(l);
   return { remove: () => listeners.delete(l) };
@@ -58,13 +64,19 @@ export function __setPermissions(p: Partial<PermissionResponse>) {
   permissions = { ...permissions, ...p };
 }
 
+/** Set what the Android call log reports for the call (talk time 0 = not answered). */
+export function __setCallLog(entry: CallLogEntry | null) {
+  callLog = entry;
+}
+
 export function __setSims(s: Sim[]) {
   sims = s;
 }
 
 export function __reset() {
   listeners.clear();
-  capabilities = { platform: "android", canDirectDial: true, canTrack: true, canChooseSim: true };
+  capabilities = { ...ANDROID };
+  callLog = null;
   permissions = { status: "granted", granted: true, canAskAgain: true };
   callState = "idle";
   sims = [{ id: "sim-1", label: "Jio" }];
@@ -76,5 +88,6 @@ export function __reset() {
     getCallState,
     listSims,
     placeCall,
+    getLastCallFromLog,
   ].forEach((f) => f.mockClear());
 }

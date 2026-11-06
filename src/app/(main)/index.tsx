@@ -1,13 +1,19 @@
-import { useCallback, useMemo, useState, type ReactNode } from "react";
-import { ActivityIndicator, FlatList, Pressable, RefreshControl, TextInput, View } from "react-native";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import { completeTask } from "@/api/opportunities";
+import { PAGE_SIZES } from "@/api/smartViews";
 import { AppText } from "@/components/AppText";
+import { Icon } from "@/components/icons";
 import { StateView } from "@/components/StateView";
 import { isTestingBackend } from "@/config/env";
 import { CallBanner } from "@/features/calling/CallBanner";
 import { useCallLead } from "@/features/calling/useCallLead";
+import { FilterBar } from "@/features/leads/filters/FilterBar";
+import { PickerSheet } from "@/features/leads/filters/PickerSheet";
 import type { LeadItem } from "@/features/leads/leadItem";
 import { LeadRow } from "@/features/leads/LeadRow";
 import {
@@ -16,38 +22,86 @@ import {
   useSmartViewLeads,
   useUserDepartment,
 } from "@/features/leads/useLeadQueries";
+import { defaultFilters, nextSort, viewConfig, type Filters } from "@/features/leads/viewConfig";
 import { ViewTabs } from "@/features/leads/ViewTabs";
 import { useDebounced } from "@/hooks/useDebounced";
 import { useAuthStore } from "@/store/auth.store";
-import { RADIUS, SPACE, useColors } from "@/theme/tokens";
+import { useViewFilters } from "@/store/viewFilters.store";
+import { SPACE, useColors } from "@/theme/tokens";
 import type { DepartmentCode } from "@/types/compass";
 
+const DEPARTMENTS: { code: DepartmentCode; label: string }[] = [
+  { code: "sales", label: "Sales" },
+  { code: "cs", label: "Customer Support" },
+];
+
+/** Smart Views, as on Compass: department tabs, view sub-tabs, filters, sort, page size. */
 export default function HomeScreen() {
   const c = useColors();
+  const qc = useQueryClient();
   const user = useAuthStore((s) => s.session?.user);
+  const role = user?.role ?? "agent";
   const callLead = useCallLead();
 
-  // Department: the agent's own, or a Sales/CS switch for users without one.
+  // ── Department (Compass shows both tabs to everyone; default = the user's own) ──
   const userDept = useUserDepartment();
-  const [pickedDept, setPickedDept] = useState<DepartmentCode>("sales");
-  const canSwitchDept = userDept.canSwitch;
-  const department: DepartmentCode | null = canSwitchDept ? pickedDept : userDept.code;
+  const storedDept = useViewFilters((s) => s.department) as DepartmentCode | null;
+  const setDepartment = useViewFilters((s) => s.setDepartment);
+  const department: DepartmentCode | null = userDept.isLoading
+    ? null
+    : (storedDept ?? userDept.code ?? "sales");
 
   const defs = useSmartViewDefinitions(department);
   const counts = useSmartViewCounts(department);
 
-  // Falls back to the first tab when nothing is picked yet or the picked tab no longer exists.
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const selectedView = useMemo(
-    () => defs.views.find((v) => v.key === selectedKey) ?? defs.views[0] ?? null,
-    [defs.views, selectedKey],
+  // ── Sub-tab (remembered per department) ──
+  const selectedByDept = useViewFilters((s) => s.selectedView);
+  const selectView = useViewFilters((s) => s.selectView);
+  const view = useMemo(
+    () =>
+      defs.views.find((v) => v.key === (department ? selectedByDept[department] : undefined)) ??
+      defs.views[0] ??
+      null,
+    [defs.views, department, selectedByDept],
+  );
+  const config = useMemo(() => (view ? viewConfig(view.key, view.type) : null), [view]);
+
+  // ── Filters for this view (defaults per role, overridden by what the agent picked) ──
+  const stored = useViewFilters((s) => (view ? s.byView[view.key] : undefined));
+  const patch = useViewFilters((s) => s.patch);
+  const pageSize = useViewFilters((s) => s.pageSize);
+  const setPageSize = useViewFilters((s) => s.setPageSize);
+  const filters = useMemo<Filters>(
+    () =>
+      config ? { ...defaultFilters(config, role), ...stored } : defaultFilters(viewConfig("none"), role),
+    [config, role, stored],
+  );
+  const change = useCallback(
+    (p: Partial<Filters>) => {
+      if (view) patch(view.key, p);
+    },
+    [view, patch],
   );
 
-  const [searchInput, setSearchInput] = useState("");
-  const search = useDebounced(searchInput.trim(), 400);
-  const list = useSmartViewLeads(selectedView, search);
+  // Search is typed locally and applied after the agent stops typing (400 ms).
+  const [searchText, setSearchText] = useState(filters.search);
+  const viewKey = view?.key;
+  const appliedSearch = filters.search;
+  // Switching views: that view's stored search becomes the box's text (reset during render, not in an effect).
+  const [searchView, setSearchView] = useState(viewKey);
+  if (searchView !== viewKey) {
+    setSearchView(viewKey);
+    setSearchText(appliedSearch);
+  }
+  const debounced = useDebounced(searchText, 400);
+  useEffect(() => {
+    if (debounced !== appliedSearch) change({ search: debounced });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debounced]);
 
-  // Counts change as tasks close; refresh them whenever the list screen comes back into view.
+  const list = useSmartViewLeads(view, config, filters, role, pageSize);
+
+  // Counts change as tasks close; refresh them whenever this screen comes back into view.
   // refetch() bypasses the query's `enabled` flag, so only call it once the department is known.
   const { refetch: refetchCounts } = counts;
   useFocusEffect(
@@ -63,6 +117,8 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [list, counts]);
 
+  const [sheet, setSheet] = useState<"sort" | "pageSize" | null>(null);
+
   const openLead = useCallback((item: LeadItem) => {
     if (!item.opportunityId) return;
     router.push({
@@ -76,6 +132,8 @@ export default function HomeScreen() {
       },
     });
   }, []);
+
+  // Calling stays on the list; the outcome form opens when the call ends.
   const onCall = useCallback(
     (item: LeadItem) =>
       void callLead({
@@ -88,6 +146,23 @@ export default function HomeScreen() {
     [callLead],
   );
 
+  const complete = useMutation({
+    mutationFn: (taskId: string) => completeTask(taskId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["smart-views"] }),
+    onError: (e) => Alert.alert("Couldn't complete the task", e instanceof Error ? e.message : "Try again."),
+  });
+  const onComplete = useCallback(
+    (item: LeadItem) => {
+      const task = item.task;
+      if (!task) return;
+      Alert.alert("Mark as completed?", task.title ?? item.name, [
+        { text: "Cancel", style: "cancel" },
+        { text: "Complete", onPress: () => complete.mutate(task.id) },
+      ]);
+    },
+    [complete],
+  );
+
   const firstName = user?.name?.split(" ")[0] ?? "";
   const initials = (user?.name ?? "?")
     .split(" ")
@@ -97,7 +172,10 @@ export default function HomeScreen() {
     .join("")
     .toUpperCase();
 
-  // ── Body states ──
+  const activeSort = config?.sortFields.find((f) => f.value === (filters.sortBy || config.defaultSortBy));
+  const activeOrder = filters.sortOrder || config?.defaultSortOrder || "DESC";
+
+  // ── Body ──
   let body: ReactNode;
   if (userDept.isLoading || defs.isLoading) {
     body = <StateView kind="loading" />;
@@ -110,25 +188,25 @@ export default function HomeScreen() {
         onRetry={() => void defs.refetch()}
       />
     );
-  } else if (!department) {
+  } else if (!view || !config) {
     body = (
-      <StateView
-        kind="empty"
-        title="No department set"
-        message="Your Compass account has a department that this app doesn't recognise. Ask your admin to check it."
-      />
-    );
-  } else if (defs.views.length === 0) {
-    body = (
-      <StateView kind="empty" title="No lists" message="Compass has no Smart Views for your department." />
+      <StateView kind="empty" title="No lists" message="Compass has no Smart Views for this department." />
     );
   } else {
     body = (
       <FlatList
         data={list.items}
         keyExtractor={(i) => i.key}
-        renderItem={({ item }) => <LeadRow item={item} onOpen={openLead} onCall={onCall} />}
-        contentContainerStyle={{ padding: SPACE.lg, gap: SPACE.sm, flexGrow: 1 }}
+        renderItem={({ item }) => (
+          <LeadRow
+            item={item}
+            kind={config.kind}
+            onOpen={openLead}
+            onCall={onCall}
+            onComplete={config.kind === "task" ? onComplete : undefined}
+          />
+        )}
+        contentContainerStyle={{ padding: SPACE.lg, paddingTop: SPACE.sm, gap: SPACE.sm, flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={c.accent} />}
         onEndReachedThreshold={0.5}
@@ -136,12 +214,36 @@ export default function HomeScreen() {
           if (list.hasNextPage && !list.isFetchingNextPage) void list.fetchNextPage();
         }}
         ListHeaderComponent={
-          list.items.length > 0 ? (
-            <AppText variant="small" tone="muted" style={{ marginBottom: SPACE.xs }}>
-              {list.total} {list.total === 1 ? "lead" : "leads"}
-              {search ? ` matching "${search}"` : ""}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: SPACE.md, flexWrap: "wrap" }}>
+            <AppText variant="small" tone="muted" style={{ flex: 1 }}>
+              Showing {list.items.length} of {list.total.toLocaleString("en-IN")}
             </AppText>
-          ) : null
+            {activeSort ? (
+              <Pressable
+                onPress={() => setSheet("sort")}
+                accessibilityRole="button"
+                accessibilityLabel={`Sort by ${activeSort.label}, ${activeOrder === "ASC" ? "ascending" : "descending"}`}
+                hitSlop={6}
+                style={{ flexDirection: "row", alignItems: "center", gap: 2 }}
+              >
+                <Icon name="sort" size={16} color={c.muted} />
+                <AppText variant="small" tone="accent">
+                  {activeSort.label}
+                </AppText>
+                <Icon name={activeOrder === "ASC" ? "arrowUp" : "arrowDown"} size={14} color={c.accent} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={() => setSheet("pageSize")}
+              accessibilityRole="button"
+              accessibilityLabel={`Rows per page ${pageSize}`}
+              hitSlop={6}
+            >
+              <AppText variant="small" tone="accent">
+                {pageSize} / page
+              </AppText>
+            </Pressable>
+          </View>
         }
         ListFooterComponent={
           list.isFetchingNextPage ? (
@@ -155,16 +257,14 @@ export default function HomeScreen() {
             <StateView
               kind="error"
               title="Couldn't load leads"
-              message={list.error.message}
+              message={list.error.message || "Failed to load data"}
               onRetry={() => void list.refetch()}
             />
           ) : (
             <StateView
               kind="empty"
-              title={search ? "No matches" : "No leads here right now"}
-              message={
-                search ? `Nothing in ${selectedView?.label} matches "${search}".` : "Pull down to refresh."
-              }
+              title={config.kind === "task" ? "No tasks found" : "No records found"}
+              message="Change the filters or pull down to refresh."
             />
           )
         }
@@ -190,7 +290,7 @@ export default function HomeScreen() {
             {isTestingBackend ? " · Testing" : ""}
           </AppText>
           <AppText variant="title" style={{ fontSize: 24 }}>
-            My leads
+            Smart Views
           </AppText>
         </View>
         <Pressable
@@ -215,78 +315,96 @@ export default function HomeScreen() {
 
       <CallBanner />
 
-      {/* Department switch (only for users without a department) */}
-      {canSwitchDept ? (
-        <View
-          style={{ flexDirection: "row", gap: SPACE.sm, paddingHorizontal: SPACE.lg, paddingTop: SPACE.md }}
-        >
-          {(["sales", "cs"] as const).map((d) => {
-            const on = department === d;
-            return (
-              <Pressable
-                key={d}
-                onPress={() => {
-                  setPickedDept(d);
-                  setSelectedKey(null);
-                }}
-                accessibilityRole="button"
-                accessibilityState={{ selected: on }}
-                style={{
-                  flex: 1,
-                  alignItems: "center",
-                  paddingVertical: SPACE.sm,
-                  borderRadius: RADIUS.sm,
-                  borderWidth: 1,
-                  borderColor: on ? c.accent : c.line,
-                  backgroundColor: on ? c.accentSoft : c.surface,
-                }}
-              >
-                <AppText variant="label" tone={on ? "accent" : "muted"}>
-                  {d === "sales" ? "Sales" : "Customer Support"}
-                </AppText>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
-
-      {/* Search */}
-      <View style={{ paddingHorizontal: SPACE.lg, paddingTop: SPACE.md }}>
-        <TextInput
-          value={searchInput}
-          onChangeText={setSearchInput}
-          placeholder="Search name or number"
-          placeholderTextColor={c.muted}
-          returnKeyType="search"
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-          accessibilityLabel="Search leads"
-          style={{
-            backgroundColor: c.surface,
-            borderWidth: 1,
-            borderColor: c.line,
-            borderRadius: RADIUS.md,
-            paddingHorizontal: SPACE.lg,
-            paddingVertical: SPACE.md,
-            fontSize: 16,
-            color: c.ink,
-          }}
-        />
+      {/* Department tabs */}
+      <View
+        style={{ flexDirection: "row", gap: SPACE.sm, paddingHorizontal: SPACE.lg, paddingTop: SPACE.md }}
+      >
+        {DEPARTMENTS.map((d) => {
+          const on = department === d.code;
+          return (
+            <Pressable
+              key={d.code}
+              onPress={() => setDepartment(d.code)}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+              style={{
+                paddingHorizontal: SPACE.md,
+                paddingVertical: SPACE.sm,
+                borderBottomWidth: 2,
+                borderBottomColor: on ? c.accent : "transparent",
+              }}
+            >
+              <AppText variant="label" tone={on ? "accent" : "muted"} style={{ fontSize: 15 }}>
+                {d.label}
+              </AppText>
+            </Pressable>
+          );
+        })}
       </View>
 
-      {/* Tabs */}
+      {/* View sub-tabs + description */}
       {defs.views.length > 0 ? (
-        <View style={{ paddingTop: SPACE.md }}>
+        <View style={{ paddingTop: SPACE.sm, gap: SPACE.sm }}>
           <ViewTabs
             views={defs.views}
             counts={counts.data}
-            selected={selectedView?.key ?? null}
-            onSelect={(k) => setSelectedKey(k)}
+            selected={view?.key ?? null}
+            onSelect={(k) => {
+              if (department) selectView(department, k);
+            }}
+          />
+          {view?.description ? (
+            <AppText variant="small" tone="muted" style={{ paddingHorizontal: SPACE.lg }}>
+              {view.description}
+            </AppText>
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Filters */}
+      {view && config ? (
+        <View style={{ paddingTop: SPACE.sm }}>
+          <FilterBar
+            config={config}
+            role={role}
+            filters={filters}
+            searchText={searchText}
+            onSearchText={setSearchText}
+            onChange={change}
           />
         </View>
       ) : null}
 
       <View style={{ flex: 1 }}>{body}</View>
+
+      {sheet === "sort" && config ? (
+        <PickerSheet
+          visible
+          mode="single"
+          title="Sort by"
+          options={config.sortFields.map((f) => {
+            const on = f.value === (filters.sortBy || config.defaultSortBy);
+            return {
+              value: f.value,
+              label: on ? `${f.label} (${activeOrder === "ASC" ? "↑" : "↓"})` : f.label,
+            };
+          })}
+          value={filters.sortBy || config.defaultSortBy}
+          onChange={(field) => change(nextSort(filters, field, config))}
+          onClose={() => setSheet(null)}
+        />
+      ) : null}
+      {sheet === "pageSize" ? (
+        <PickerSheet
+          visible
+          mode="single"
+          title="Rows per page"
+          options={PAGE_SIZES.map((n) => ({ value: String(n), label: String(n) }))}
+          value={String(pageSize)}
+          onChange={(v) => setPageSize(Number(v))}
+          onClose={() => setSheet(null)}
+        />
+      ) : null}
     </SafeAreaView>
   );
 }
