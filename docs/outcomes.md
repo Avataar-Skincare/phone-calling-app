@@ -1,5 +1,9 @@
 # Call outcomes
 
+> **Being replaced.** [ADR 0005](decisions/0005-log-calls-as-manual-outbound-call.md) removes the
+> outcome sheet: the app logs a "Manual Outbound Call" activity when a call ends, and agents record
+> outcomes on the Compass website. This page describes v1 until that change ships.
+
 After every call the agent records how it went. The outcome is saved to Compass through the same
 Activity Form the web uses (see [ADR 0002](decisions/0002-save-outcomes-through-activity-form.md)).
 

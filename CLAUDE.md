@@ -34,5 +34,7 @@ compile the module: see [docs/development.md](docs/development.md#checking-nativ
 - [x] 2 · Smart View lists and lead screen
 - [x] 3 · Native calling (`sim-dialer`), call sessions, permissions, SIM choice
 - [x] 4 · Outcome sheet ([docs/outcomes.md](docs/outcomes.md)) and offline queue
+- [ ] 4b · Replace the outcome sheet with a "Manual Outbound Call" activity log
+      ([ADR 0005](docs/decisions/0005-log-calls-as-manual-outbound-call.md))
 - [ ] 5 · Device testing and store builds
 - [ ] 6 · Pilot and rollout

@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Decided (to build)
+
+- [ADR 0005](docs/decisions/0005-log-calls-as-manual-outbound-call.md): the outcome sheet goes; when a call ends the app logs a `manual_outbound_call` ("Manual Outbound Call") activity through `POST /api/activities/log`. Agents record outcomes on the Compass website. Supersedes ADR 0002.
+
 ### Added (tests)
 
 - Test suite: 163 unit and integration tests (Jest, React Native Testing Library, expo-router test renderer) with a fake Compass and a fake phone, plus read-only contract tests against Compass testing. Coverage report in CI.
