@@ -15,6 +15,8 @@ import type {
   VerifyOtpResponse,
 } from "@/types/compass";
 
+// test-leads.avataarskin.com is the SAME Compass as compass.avataarskin.com (one server, one
+// database): these tests read live data. They must stay read-only.
 const API = (process.env.COMPASS_API_URL ?? "https://test-leads.avataarskin.com/api").replace(/\/+$/, "");
 const PHONE = process.env.COMPASS_TEST_PHONE;
 const OTP = process.env.COMPASS_TEST_OTP;

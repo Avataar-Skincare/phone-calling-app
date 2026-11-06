@@ -18,7 +18,7 @@ calling features (it falls back to plain `tel:` links).
 
 ```bash
 npm install
-cp .env.example .env            # optional; defaults to Compass testing
+cp .env.example .env            # optional; defaults to compass.avataarskin.com
 eas build --profile development --platform android   # or ios; install the build on a phone
 npm start                       # then open the app on the phone
 ```
@@ -37,20 +37,23 @@ To log in you need a phone number that exists as a user in the Compass environme
 | `npm run check:lockfile`  | Fails if `package-lock.json` lacks a required peer dependency (EAS Build runs `npm ci` and rejects such a lock) |
 | `npm run typecheck`       | `typegen` then `tsc --noEmit`                                                                                   |
 | `npm test`                | Unit and integration tests (Jest, `jest-expo`). `test:watch`, `test:coverage`                                   |
-| `npm run test:contract`   | Read-only checks against Compass testing (needs `COMPASS_TEST_PHONE`, `COMPASS_TEST_OTP`)                       |
+| `npm run test:contract`   | Read-only checks against Compass, live data (needs `COMPASS_TEST_PHONE`, `COMPASS_TEST_OTP`)                    |
 | `npm run bundle-check`    | Bundles Android and iOS JavaScript, then deletes the output                                                     |
 | `npm run verify`          | All of the above checks. Run before opening a PR                                                                |
 
 ## Environments
 
-| EAS profile   | Compass    | Distribution                      |
-| ------------- | ---------- | --------------------------------- |
-| `development` | Testing    | Dev client (APK / internal iOS)   |
-| `preview`     | Testing    | Internal APK link, TestFlight     |
-| `production`  | Production | Play internal testing, TestFlight |
+| EAS profile   | Compass                   | Distribution                      |
+| ------------- | ------------------------- | --------------------------------- |
+| `development` | `compass.avataarskin.com` | Dev client (APK / internal iOS)   |
+| `preview`     | `compass.avataarskin.com` | Internal APK link, TestFlight     |
+| `production`  | `compass.avataarskin.com` | Play internal testing, TestFlight |
 
-Locally, `EXPO_PUBLIC_COMPASS_API_URL` in `.env` overrides the default (Compass testing). Screens
-show a small "Testing" label whenever the app points at testing.
+**There is no separate testing Compass.** `test-leads.avataarskin.com` and
+`compass.avataarskin.com` are one server and one database, so every build reads and writes real
+leads, and Call rings real customers. Test with leads that use your team's own numbers.
+`EXPO_PUBLIC_COMPASS_API_URL` in `.env` overrides the default. The "Testing" label only appears
+for a URL containing `test-`.
 
 ## Checking native code locally
 

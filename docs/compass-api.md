@@ -2,10 +2,9 @@
 
 Backend: `Avataar-Skincare/leadsquared-avataar-server` (NestJS). All routes are under `/api`.
 
-| Environment | Base URL                                 |
-| ----------- | ---------------------------------------- |
-| Testing     | `https://test-leads.avataarskin.com/api` |
-| Production  | `https://compass.avataarskin.com/api`    |
+| Environment | Base URL                              |
+| ----------- | ------------------------------------- |
+| All builds  | `https://compass.avataarskin.com/api` |
 
 ## Conventions
 
@@ -103,6 +102,7 @@ Appointment, WhatsApp chat, Assign Owner, Edit Name, AI call analysis, in-app re
   "phone": "9876500001",
   "activity_type": "manual_outbound_call",
   "opportunity_id": "7001",
+  "occurred_at": "2026-11-06T10:16:32.000Z",
   "data": {
     "agent_user_id": "31",
     "agent_name": "Test Agent",
@@ -120,6 +120,11 @@ Appointment, WhatsApp chat, Assign Owner, Edit Name, AI call analysis, in-app re
   }
 }
 ```
+
+`occurred_at` is the call's end time. Compass uses it as the activity time when it is at most 2
+days old and not in the future, otherwise its own clock, so a call queued offline still shows at the
+time it happened (Compass `feat/activity-log-occurred-at`). **Compass must be deployed with that
+change before an app build sends this field**: older Compass rejects unknown fields with a 400.
 
 Replies **200 even on failure**: `{ "activity_id": null, "message": "<reason>" }`. Success has a
 non-null `activity_id`. The `manual_outbound_call` activity type must exist in each Compass

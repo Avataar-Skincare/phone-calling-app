@@ -9,7 +9,7 @@
  */
 import type { OpportunityDetail, SmartViewDef, VerifyOtpResponse } from "@/types/compass";
 
-export const API = "https://test-leads.avataarskin.com/api";
+export const API = "https://compass.avataarskin.com/api";
 
 // ── Fixtures ────────────────────────────────────────────────
 

@@ -26,6 +26,7 @@ describe("buildCallLogRequest", () => {
       phone: "9871107094",
       activity_type: "manual_outbound_call",
       opportunity_id: "12345",
+      occurred_at: "2026-11-06T10:18:38.000Z",
       data: {
         agent_user_id: "42",
         agent_name: "Priya Sharma",
@@ -43,6 +44,13 @@ describe("buildCallLogRequest", () => {
         app_session_id: "lz3k9a-x7f2qa",
       },
     });
+  });
+
+  it("stamps the activity with the call's end time, not the time it is sent", () => {
+    // Offline at the call, sent hours later: Compass should still file it at the call time.
+    const body = buildCallLogRequest({ ...call, endedAt: Date.parse("2026-11-06T12:48:00.000Z") });
+    expect(body.occurred_at).toBe("2026-11-06T12:48:00.000Z");
+    expect(body.occurred_at).toBe(body.data.call_ended_at);
   });
 
   it("never asks Compass to create a lead", () => {

@@ -34,8 +34,9 @@ eas build --profile development --platform android   # or ios; install on a phon
 npm start
 ```
 
-The app points at **Compass testing** by default. Log in with a number that exists as a user
-there. Full setup, including local native builds: [docs/development.md](docs/development.md).
+The app points at **Compass** (`compass.avataarskin.com`). There is no separate testing Compass:
+every build works on real leads, so test with leads that use your team's own numbers. Log in with a
+number that exists as a Compass user. Full setup, including local native builds: [docs/development.md](docs/development.md).
 
 ## Scripts
 

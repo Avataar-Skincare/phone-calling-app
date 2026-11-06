@@ -28,6 +28,11 @@ export interface CallLogRequest {
   phone: string;
   activity_type: typeof CALL_ACTIVITY_TYPE;
   opportunity_id?: string;
+  /**
+   * When the call happened (its end), ISO UTC. Compass uses it as the activity time when it is at
+   * most 2 days old, so a call sent late after being offline still lands at the right time.
+   */
+  occurred_at: string;
   data: Record<string, string | number>;
 }
 
@@ -70,6 +75,7 @@ export function buildCallLogRequest(call: CallForLog): CallLogRequest {
     phone: compassPhone(call.phone),
     activity_type: CALL_ACTIVITY_TYPE,
     ...(call.opportunityId ? { opportunity_id: call.opportunityId } : {}),
+    occurred_at: iso(call.endedAt),
     data,
   };
 }

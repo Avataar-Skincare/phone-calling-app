@@ -76,6 +76,7 @@ describe("calling a lead", () => {
       phone: "9876500001",
       activity_type: "manual_outbound_call",
       opportunity_id: "7001",
+      occurred_at: new Date(call!.endedAt).toISOString(),
       data: expect.objectContaining({
         agent_user_id: "31",
         agent_name: "Test Agent",

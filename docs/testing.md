@@ -71,7 +71,7 @@ Things to know:
 
 ## Contract tests
 
-`tests/contract/compass.contract.test.ts` logs in to **Compass testing** and checks login, departments,
+`tests/contract/compass.contract.test.ts` logs in to Compass (`test-leads`, which is the **live** Compass) and checks login, departments,
 Smart View definitions and data (both row shapes go through `toLeadItem`) and the lead endpoint.
 **It never saves anything.** It refuses to run against production.
 

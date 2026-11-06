@@ -6,6 +6,15 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+
+- Call logs send `occurred_at` (the call's end time), so a call queued while offline is filed in
+  Compass at the time it happened, not when it was sent (accepted when at most 2 days old).
+  **Needs Compass with `feat/activity-log-occurred-at` deployed first**; older Compass rejects the
+  field.
+- Every build points at `https://compass.avataarskin.com/api`. `test-leads.avataarskin.com` is the
+  same Compass (same server and database), so the "Testing" label no longer shows.
+
 ### Removed (2026-11-06)
 
 - Change Stage on the client page (`POST /opportunities/:id/stage`) and Mark as completed on task views and the Tasks tab (`POST /tasks/:id/update`). Agents change stages, record outcomes and complete tasks only on the Compass website ([ADR 0006](docs/decisions/0006-call-times-and-whatsapp.md)).

@@ -6,7 +6,7 @@
 
 - [ ] `npm run verify` passes locally (lint, format, types, tests, bundle)
 - [ ] Ran on a real device: <!-- Android model + version / iPhone model + iOS version, or "not needed" -->
-- [ ] Against Compass testing (`test-leads.avataarskin.com`)
+- [ ] Against Compass (`compass.avataarskin.com`; there is no separate testing Compass, so use test leads)
 
 ## Checklist
 

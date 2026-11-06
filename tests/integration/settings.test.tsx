@@ -40,7 +40,8 @@ describe("account screen", () => {
     expect(screen.getByText("Test Agent")).toBeTruthy();
     expect(screen.getByText("+91 90000 00001")).toBeTruthy();
     expect(screen.getByText("Agent")).toBeTruthy();
-    expect(screen.getByText("Testing")).toBeTruthy();
+    // compass.avataarskin.com is the only Compass (test-leads is the same backend).
+    expect(screen.getByText("Production")).toBeTruthy();
 
     fireEvent.press(screen.getByText("Log out"));
     await waitFor(() => expect(useAuthStore.getState().session).toBeNull());

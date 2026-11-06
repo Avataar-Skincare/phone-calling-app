@@ -10,7 +10,7 @@ import type { ConfigContext, ExpoConfig } from "expo/config";
  * EXPO_PUBLIC_COMPASS_API_URL (see eas.json); local runs fall back to Compass testing.
  */
 const APP_ID = "com.avataarskin.dialer";
-const COMPASS_API_URL = process.env.EXPO_PUBLIC_COMPASS_API_URL ?? "https://test-leads.avataarskin.com/api";
+const COMPASS_API_URL = process.env.EXPO_PUBLIC_COMPASS_API_URL ?? "https://compass.avataarskin.com/api";
 
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,

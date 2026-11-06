@@ -45,7 +45,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "compassApiUrl": "https://test-leads.avataarskin.com/api",
+      "compassApiUrl": "https://compass.avataarskin.com/api",
       "router": {},
       "eas": {
         "projectId": "2d1c62d9-4fe7-4cad-8b0a-698e1fc67af9"

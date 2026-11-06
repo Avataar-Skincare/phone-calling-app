@@ -248,7 +248,7 @@ describe("tabs with data", () => {
     expect(screen.getAllByText("Interested").length).toBeGreaterThan(0);
 
     fireEvent.press(screen.getAllByText("Play")[0]!);
-    expect(openURL).toHaveBeenLastCalledWith("https://test-leads.avataarskin.com/api/ameyo/recording/55");
+    expect(openURL).toHaveBeenLastCalledWith("https://compass.avataarskin.com/api/ameyo/recording/55");
 
     fireEvent.press(screen.getByText("Next"));
     await waitFor(() =>
