@@ -43,3 +43,46 @@ compile the module: see [docs/development.md](docs/development.md#checking-nativ
       [0006](docs/decisions/0006-call-times-and-whatsapp.md)); WhatsApp button
 - [ ] 5 · Device testing and store builds
 - [ ] 6 · Pilot and rollout
+
+## Planned: call recording upload (not built yet)
+
+Agreed 2026-11-06. Apps can't record calls (Android 10+ blocks it, iOS never allows it), so the
+agent records with the phone's own dialer and the app uploads that file afterwards.
+
+**Flow:** call ends → app logs it (`POST /activities/log`, returns `activity_id`) → summary card
+shows **Upload recording** → agent picks the audio file → app uploads it to Compass with the
+agent's JWT → Compass stores it in S3 and saves `recording_url` on that activity → the existing
+▶ Play (`GET /ameyo/recording/:activityId`, which reads `recording_url` and redirects) plays it on
+the website and in the app's Calls tab.
+
+**App side (this repo):**
+
+- Upload recording button on the call summary card, and a reminder for calls without one.
+- File picker (`audio/*`); optionally auto-find the newest recording made during the call
+  (Android only, needs the "Music and audio" permission). Recording folders differ by brand:
+  Samsung `Recordings/Call`, Xiaomi `MIUI/sound_recorder/call_rec`; Google Phone keeps them inside
+  its app (agent must share/save first); iPhone (iOS 18.1+) saves to Notes (export to Files first).
+- Upload only after the call log has an `activity_id`; keep the file reference on the phone and
+  retry like the call log (`sendCalls.ts`). Show progress and failures.
+- This is a second write to Compass (ADR 0006 says the call log is the only one): record it in
+  ADR 0007 before building. Tests and docs as usual.
+
+**Compass side (Mithilesh, `leadsquared-avataar-server`). Don't build these here:**
+
+1. Upload endpoint, e.g. `POST /activities/:activityId/recording`: JWT-protected, one audio file
+   (m4a, mp3, wav, amr, ogg, ≤ about 25 MB), and only for a `manual_outbound_call` activity whose
+   `agent_user_id` is the caller.
+2. Store the file in S3 (reuse `src/modules/exports/s3/s3.service.ts`), e.g.
+   `recordings/manual/<activity_id>.<ext>`, and save `recording_url` in that activity's
+   `activity_type_attributes`.
+3. List `manual_outbound_call` in the call-history queries in `src/modules/ameyo/ameyo.service.ts`
+   (`getCallHistoryForOpportunity` and the lead version), so app calls show in the Calls tab at
+   all. Add it there, not to the shared `CALL_ACTIVITY_CODES`, which also drives telephony logging.
+4. Raise nginx `client_max_body_size` for that route (the default 1 MB rejects recordings).
+5. Decide public vs private files: telephony recordings use public CDN links; for customers'
+   voices prefer a private S3 object and have the play endpoint redirect to a short-lived
+   presigned URL (`getPresignedDownloadUrl` already exists).
+
+**Still to decide before building:** which phones agents use (picker only vs auto-find), and
+company sign-off on recording customer calls (consent wording, who can listen, how long to keep
+them, DPDP Act 2023).
