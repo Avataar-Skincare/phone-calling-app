@@ -20,6 +20,10 @@ All notable changes to this project are documented here. The format follows
 - Change Stage on the client page (`POST /opportunities/:id/stage`) and Mark as completed on task views and the Tasks tab (`POST /tasks/:id/update`). Agents change stages, record outcomes and complete tasks only on the Compass website ([ADR 0006](docs/decisions/0006-call-times-and-whatsapp.md)).
 - The outcome (dispose) form after calls and its "Waiting to send" screen. Outcomes are recorded on the Compass website ([ADR 0005](docs/decisions/0005-log-calls-as-manual-outbound-call.md)).
 
+### Fixed (2026-11-06)
+
+- Call times in the Manual Outbound Call activity (`call_tapped_at`, `call_started_at`, `call_ended_at`) showed in UTC and hard to read in Compass (`2026-11-06T12:51:50.581Z` for a call at 18:21). They are now sent as IST `2026-11-06 18:21:50`, Compass's activity format.
+
 ### Added (2026-11-06)
 
 - Every call is logged in Compass as a "Manual Outbound Call" activity (`POST /activities/log`) with talk time, ringing time and total time (dialing start → end); kept on the phone and retried when Compass can't be reached; refused logs shown with Retry / Discard ([ADR 0005](docs/decisions/0005-log-calls-as-manual-outbound-call.md), [0006](docs/decisions/0006-call-times-and-whatsapp.md)).

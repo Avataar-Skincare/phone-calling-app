@@ -37,11 +37,17 @@ both platforms:
    | `call_duration_seconds` | total, start → end (unchanged from ADR 0005)      |
    | `call_talk_seconds`     | talk, on Android too                              |
    | `call_ring_seconds`     | ringing (new)                                     |
-   | `call_tapped_at`        | tap time, ISO UTC (new, for information only)     |
+   | `call_tapped_at`        | tap time (new, for information only)              |
    | `call_answered`         | `yes` / `no` on both platforms when talk is known |
 
    A tap → end total was considered and dropped: on iPhone it counted the confirm prompt as
    ringing.
+
+   **Times in IST** (2026-11-06, after the first real call): `call_tapped_at`, `call_started_at`
+   and `call_ended_at` are sent as IST `2026-11-06 18:21:50` (date, space, time to the second),
+   not UTC ISO (`2026-11-06T12:51:50.581Z`). Compass's activity details show the raw value, and
+   UTC read as the wrong time. This is the format Compass's own activity data uses
+   (`2026-02-24 14:30:00`) and replaces ADR 0005's `toISOString()`.
 
 4. **No outcome screen.** After a call the app shows a dismissible summary ("Connected · Talk time
    1 min 20 s · Ringing 12 s · Total 1 min 32 s", or "Not answered · Rang for 31 s"). Calls not

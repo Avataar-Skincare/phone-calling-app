@@ -30,9 +30,9 @@ describe("buildCallLogRequest", () => {
       data: {
         agent_user_id: "42",
         agent_name: "Priya Sharma",
-        call_tapped_at: "2026-11-06T10:15:00.000Z",
-        call_started_at: "2026-11-06T10:15:02.000Z",
-        call_ended_at: "2026-11-06T10:18:38.000Z",
+        call_tapped_at: "2026-11-06 15:45:00",
+        call_started_at: "2026-11-06 15:45:02",
+        call_ended_at: "2026-11-06 15:48:38",
         call_duration_seconds: 218,
         call_talk_seconds: 201,
         call_ring_seconds: 17,
@@ -50,7 +50,8 @@ describe("buildCallLogRequest", () => {
     // Offline at the call, sent hours later: Compass should still file it at the call time.
     const body = buildCallLogRequest({ ...call, endedAt: Date.parse("2026-11-06T12:48:00.000Z") });
     expect(body.occurred_at).toBe("2026-11-06T12:48:00.000Z");
-    expect(body.occurred_at).toBe(body.data.call_ended_at);
+    // Same moment as the readable call_ended_at, which is in IST for people
+    expect(body.data.call_ended_at).toBe("2026-11-06 18:18:00");
   });
 
   it("never asks Compass to create a lead", () => {
@@ -73,7 +74,7 @@ describe("buildCallLogRequest", () => {
     expect(body.data).not.toHaveProperty("call_ring_seconds");
     expect(body.data).not.toHaveProperty("call_sim");
     expect(body.data).toMatchObject({
-      call_started_at: "2026-11-06T10:15:00.000Z", // falls back to the tap
+      call_started_at: "2026-11-06 15:45:00", // falls back to the tap
       call_answered: "unknown",
       call_end_estimated: "yes",
     });

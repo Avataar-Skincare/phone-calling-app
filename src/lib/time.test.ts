@@ -1,5 +1,5 @@
 /// <reference types="jest" />
-import { formatTimeIST, formatWhen, isOverdue } from "./time";
+import { formatTimeIST, formatWhen, isOverdue, toIstDateTime } from "./time";
 
 // "now" = 9 Nov 2026, 11:00 IST = 05:30 UTC
 const now = Date.parse("2026-11-09T05:30:00Z");
@@ -44,5 +44,16 @@ describe("isOverdue", () => {
   it("is never overdue without a valid date", () => {
     expect(isOverdue(null, now)).toBe(false);
     expect(isOverdue("garbage", now)).toBe(false);
+  });
+});
+
+describe("toIstDateTime (call times sent to Compass)", () => {
+  it("writes date, a space, and the IST time to the second", () => {
+    // The first real call: 12:51:50 UTC = 18:21:50 IST
+    expect(toIstDateTime(Date.parse("2026-11-06T12:51:50.581Z"))).toBe("2026-11-06 18:21:50");
+  });
+
+  it("rolls over to the next IST day", () => {
+    expect(toIstDateTime(Date.parse("2026-11-06T20:00:00.000Z"))).toBe("2026-11-07 01:30:00");
   });
 });

@@ -27,7 +27,10 @@ compile the module: see [docs/development.md](docs/development.md#checking-nativ
   talk time only ([ADR 0006](docs/decisions/0006-call-times-and-whatsapp.md)); never add write access to
   the call log or contacts.
 - `/android` and `/ios` are generated; never edit them.
-- Times to Compass: ISO UTC (`toISOString()`), like the web form. Times shown: IST via `src/lib/time.ts`.
+- Times to Compass: fields Compass parses (`occurred_at`, filters) are ISO UTC (`toISOString()`).
+  The readable call-log details (`call_*_at`) are IST "2026-11-06 18:21:50" (`toIstDateTime()`),
+  Compass's activity format, so its activity details read correctly. Times shown: IST via
+  `src/lib/time.ts`.
 - Update `docs/` and `CHANGELOG.md` with every change. Commit only when asked.
 
 ## Build status (design steps)

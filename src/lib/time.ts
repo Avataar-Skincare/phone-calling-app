@@ -1,5 +1,5 @@
 /**
- * Date formatting in IST. Pure functions, covered by time.regression.ts.
+ * Date formatting in IST. Pure functions, covered by time.test.ts.
  *
  * Done with a fixed +05:30 offset (India has no daylight saving) instead of Intl time zones,
  * so the output is identical on every device and in tests.
@@ -66,4 +66,14 @@ export function isOverdue(dueAt: string | null | undefined, now: number = Date.n
   if (!dueAt) return false;
   const ms = Date.parse(dueAt);
   return !Number.isNaN(ms) && ms < now;
+}
+
+/**
+ * "2026-11-06 18:21:50": date, a space, and the time on the IST clock, to the second. Compass's
+ * own activity data uses this format (e.g. "2026-02-24 14:30:00"), and its activity details show
+ * the raw value, so it reads correctly there.
+ */
+export function toIstDateTime(ms: number): string {
+  const iso = new Date(ms + IST_OFFSET_MS).toISOString(); // "2026-11-06T18:21:50.581Z" (IST wall clock)
+  return `${iso.slice(0, 10)} ${iso.slice(11, 19)}`;
 }

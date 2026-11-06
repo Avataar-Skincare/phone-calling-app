@@ -3,6 +3,7 @@
  * callLog.test.ts.
  */
 import type { CallTimes } from "./callState";
+import { toIstDateTime } from "./time";
 
 export const CALL_ACTIVITY_TYPE = "manual_outbound_call";
 
@@ -44,7 +45,8 @@ export function compassPhone(e164: string): string {
   return e164.replace(/\D/g, "").slice(-10);
 }
 
-const iso = (ms: number) => new Date(ms).toISOString();
+/** Readable call times in the activity details: "2026-11-06 18:21:50" (IST). */
+const shown = toIstDateTime;
 
 /**
  * POST /api/activities/log body. Never sends `create_if_missing` (the app must not create leads).
@@ -55,9 +57,9 @@ const iso = (ms: number) => new Date(ms).toISOString();
  */
 export function buildCallLogRequest(call: CallForLog): CallLogRequest {
   const data: Record<string, string | number> = {
-    call_tapped_at: iso(call.tappedAt),
-    call_started_at: iso(call.startedAt ?? call.tappedAt),
-    call_ended_at: iso(call.endedAt),
+    call_tapped_at: shown(call.tappedAt),
+    call_started_at: shown(call.startedAt ?? call.tappedAt),
+    call_ended_at: shown(call.endedAt),
     call_duration_seconds: call.totalDurationSeconds,
     call_answered: call.answered === null ? "unknown" : call.answered ? "yes" : "no",
     call_end_estimated: call.approximate ? "yes" : "no",
@@ -75,7 +77,8 @@ export function buildCallLogRequest(call: CallForLog): CallLogRequest {
     phone: compassPhone(call.phone),
     activity_type: CALL_ACTIVITY_TYPE,
     ...(call.opportunityId ? { opportunity_id: call.opportunityId } : {}),
-    occurred_at: iso(call.endedAt),
+    // Machine-read by Compass: must stay ISO UTC (not the readable IST format above).
+    occurred_at: new Date(call.endedAt).toISOString(),
     data,
   };
 }

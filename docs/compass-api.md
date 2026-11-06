@@ -15,8 +15,9 @@ Backend: `Avataar-Skincare/leadsquared-avataar-server` (NestJS). All routes are 
 - Compass applies its own scope rules: agents see and change only opportunities they own; team leads
   see their team; supervisors and administrators see everything. A lead that was reassigned returns
   **403**.
-- Dates are ISO 8601. The web form sends follow-up times as UTC (`Date.toISOString()`); the app
-  does the same.
+- The call log's `call_*_at` times are sent as IST `2026-11-06 18:21:50` (date, space, time to the
+  second): Compass's format for activity times, and readable in its activity details, which show
+  the raw value.
 
 v1 of the app needs **no Compass changes**. Every endpoint below already exists.
 
@@ -106,9 +107,9 @@ Appointment, WhatsApp chat, Assign Owner, Edit Name, AI call analysis, in-app re
   "data": {
     "agent_user_id": "31",
     "agent_name": "Test Agent",
-    "call_tapped_at": "2026-11-06T10:15:00.000Z",
-    "call_started_at": "2026-11-06T10:15:01.000Z",
-    "call_ended_at": "2026-11-06T10:16:32.000Z",
+    "call_tapped_at": "2026-11-06 15:45:00",
+    "call_started_at": "2026-11-06 15:45:01",
+    "call_ended_at": "2026-11-06 15:46:32",
     "call_duration_seconds": 91,
     "call_talk_seconds": 80,
     "call_ring_seconds": 11,
