@@ -3,8 +3,7 @@
 /**
  * Integration: lead lists, search, lead screen and departments, against a fake Compass.
  */
-import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
-import { Alert, type AlertButton } from "react-native";
+import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
 
 import { agent, fakeCompass } from "../support/compass";
@@ -101,23 +100,16 @@ describe("lead lists", () => {
 });
 
 describe("task views", () => {
-  it("marks a task completed after the agent confirms", async () => {
-    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+  it("shows tasks to call, with no Mark as completed (tasks are completed on the website)", async () => {
     const server = fakeCompass();
     signedInAs();
     renderRouter("./src/app", { initialUrl: "/" });
     await screen.findByLabelText("Asha Rao, open lead");
 
-    fireEvent.press(screen.getAllByLabelText("Mark as completed")[0]!);
-    expect(alertSpy).toHaveBeenLastCalledWith("Mark as completed?", "First call", expect.any(Array));
-    const buttons = (alertSpy.mock.calls.at(-1)?.[2] ?? []) as AlertButton[];
-    await act(async () => buttons.find((b) => b.text === "Complete")?.onPress?.());
-
-    await waitFor(() => expect(server.find("POST", "/tasks/9001/update")).toHaveLength(1));
-    expect(server.find("POST", "/tasks/9001/update")[0]?.body).toEqual({ status: "completed" });
-    // The list reloads
-    await waitFor(() => expect(server.find("GET", "/smart-views/data").length).toBeGreaterThan(1));
-    alertSpy.mockRestore();
+    expect(screen.getByLabelText("Call Asha Rao")).toBeTruthy();
+    expect(screen.getByLabelText("WhatsApp Asha Rao")).toBeTruthy();
+    expect(screen.queryByLabelText("Mark as completed")).toBeNull();
+    expect(server.requests.filter((r) => r.method !== "GET")).toEqual([]);
   });
 });
 
@@ -211,26 +203,15 @@ describe("lead screen", () => {
     expect(screen.getByText("0 appointments found")).toBeTruthy();
   });
 
-  it("changes the stage with a reason", async () => {
+  it("has no Change Stage: stages and outcomes are changed on the Compass website", async () => {
     const server = fakeCompass();
     signedInAs();
     renderRouter("./src/app", { initialUrl: "/lead/7001" });
     await screen.findByText("+91-9876500001");
 
-    fireEvent.press(screen.getByText("Change Stage"));
-    expect(screen.getByText("Not Interested (inactive)")).toBeTruthy();
-    expect(screen.getByText("Update Stage")).toBeDisabled(); // still the current stage
-    fireEvent.press(screen.getByText("Warm - Consultation Done"));
-    fireEvent.changeText(screen.getByLabelText("Reason"), "Consult done on call");
-    fireEvent.press(screen.getByText("Update Stage"));
-
-    await waitFor(() => expect(server.find("POST", "/opportunities/7001/stage")).toHaveLength(1));
-    expect(server.find("POST", "/opportunities/7001/stage")[0]?.body).toEqual({
-      opportunity_stage_id: "4",
-      reason: "Consult done on call",
-    });
-    // The page reloads the opportunity afterwards
-    await waitFor(() => expect(server.find("GET", "/opportunities/7001").length).toBeGreaterThan(1));
+    expect(screen.queryByText("Change Stage")).toBeNull();
+    expect(screen.getByText("New Lead")).toBeTruthy(); // the stage is still shown
+    expect(server.find("POST", /\/stage$/)).toHaveLength(0);
   });
 
   it("explains when the lead is no longer the agent's", async () => {

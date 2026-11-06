@@ -12,7 +12,6 @@ import { CallBanner } from "@/features/calling/CallBanner";
 import { useCallLead } from "@/features/calling/useCallLead";
 import { fullName } from "@/features/leads/leadItem";
 import { useOpportunity } from "@/features/leads/useLeadQueries";
-import { ChangeStageSheet } from "@/features/opportunity/ChangeStageSheet";
 import { OverviewTab } from "@/features/opportunity/OverviewTab";
 import { ProfilePanel } from "@/features/opportunity/ProfilePanel";
 import {
@@ -47,7 +46,6 @@ export default function LeadScreen() {
   const callLead = useCallLead();
   const [refreshing, setRefreshing] = useState(false);
   const [tab, setTab] = useState<Tab>("Overview");
-  const [stageOpen, setStageOpen] = useState(false);
 
   const lostAccess =
     query.error instanceof ApiError && (query.error.status === 403 || query.error.status === 404);
@@ -154,7 +152,7 @@ export default function LeadScreen() {
           ) : null}
         </View>
 
-        <ProfilePanel opp={opp} phone={phone} onCall={call} onChangeStage={() => setStageOpen(true)} />
+        <ProfilePanel opp={opp} phone={phone} onCall={call} />
 
         {/* Tabs */}
         <ScrollView
@@ -181,7 +179,6 @@ export default function LeadScreen() {
         {tab === "Purchase History" ? <PurchaseHistoryTab opp={opp} /> : null}
         {tab === "Appointments" ? <AppointmentsTab opp={opp} /> : null}
       </ScrollView>
-      <ChangeStageSheet opp={opp} visible={stageOpen} onClose={() => setStageOpen(false)} />
     </SafeAreaView>
   );
 }

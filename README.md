@@ -17,7 +17,8 @@ time ([ADR 0005](docs/decisions/0005-log-calls-as-manual-outbound-call.md), [000
 - "Calling …" banner while a call is live; one call at a time
 - After each call: talk time, ringing and total shown on screen and logged in Compass (kept and retried when offline)
 - WhatsApp button next to every Call button, opening a chat with the client's number
-- Client page like Compass's opportunity page: profile, tiles, Properties, Change Stage and all tabs
+- Client page like Compass's opportunity page: profile, tiles, Properties and all tabs (read-only:
+  stages and outcomes are changed on the Compass website)
 
 ## Tech stack
 

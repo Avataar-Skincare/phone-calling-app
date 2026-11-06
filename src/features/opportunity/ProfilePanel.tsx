@@ -10,17 +10,15 @@ import { RADIUS, SPACE, useColors, useTone } from "@/theme/tokens";
 import type { OpportunityDetail } from "@/types/compass";
 import { Row, Section } from "./Section";
 
-/** Compass's left panel: identity, Call, the four tiles and Properties. */
+/** Compass's left panel: identity, Call, WhatsApp, the four tiles and Properties. No Change Stage (website only). */
 export function ProfilePanel({
   opp,
   phone,
   onCall,
-  onChangeStage,
 }: {
   opp: OpportunityDetail;
   phone: string | null;
   onCall: () => void;
-  onChangeStage: () => void;
 }) {
   const c = useColors();
   const lead = opp.lead;
@@ -99,8 +97,6 @@ export function ProfilePanel({
         <Row label="Created" value={formatDateIN(opp.created_at)} />
         <Row label="Updated" value={formatDateIN(opp.updated_at)} />
       </Section>
-
-      <Button title="Change Stage" kind="secondary" onPress={onChangeStage} />
     </View>
   );
 }

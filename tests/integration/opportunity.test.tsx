@@ -4,8 +4,8 @@
  * Integration: the client (opportunity) page with real data in every card and tab, against a
  * fake Compass. Empty states are covered in leads.test.tsx.
  */
-import { Alert, Linking } from "react-native";
-import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { Linking } from "react-native";
+import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
 
 import { fakeCompass, opportunity } from "../support/compass";
@@ -13,10 +13,8 @@ import { resetAppState, signedInAs } from "../support/state";
 
 jest.mock("@modules/sim-dialer");
 
-const alertSpy = jest.spyOn(Alert, "alert");
 beforeEach(async () => {
   await resetAppState();
-  alertSpy.mockClear();
   signedInAs();
 });
 
@@ -185,7 +183,7 @@ describe("tabs with data", () => {
     expect(screen.getByText("notes")).toBeTruthy();
   });
 
-  it("Tasks: groups by due date, filters by status and completes a task", async () => {
+  it("Tasks: groups by due date and filters by status, read-only", async () => {
     const server = fakeCompass();
     server.on("GET", "/tasks", (req) => ({
       body: page(
@@ -215,17 +213,8 @@ describe("tabs with data", () => {
     expect(screen.getByText("Overdue")).toBeTruthy();
     expect(screen.getByText("Assigned to Test Agent")).toBeTruthy();
 
-    fireEvent.press(screen.getByLabelText("Mark as completed"));
-    expect(alertSpy).toHaveBeenLastCalledWith(
-      "Mark as completed?",
-      "Call back about package",
-      expect.any(Array),
-    );
-    const buttons = (alertSpy.mock.calls.at(-1)?.[2] ?? []) as { text?: string; onPress?: () => void }[];
-    await act(async () => buttons.find((b) => b.text === "Complete")?.onPress?.());
-    await waitFor(() =>
-      expect(server.find("POST", "/tasks/9001/update")[0]?.body).toEqual({ status: "completed" }),
-    );
+    // Read-only: tasks are completed on the Compass website
+    expect(screen.queryByLabelText("Mark as completed")).toBeNull();
 
     fireEvent.press(screen.getByText("Completed"));
     expect(await screen.findByText("No completed tasks for this opportunity")).toBeTruthy();

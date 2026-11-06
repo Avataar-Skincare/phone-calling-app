@@ -1,8 +1,6 @@
 import { useMemo, useState } from "react";
-import { Alert, Linking, Pressable, View } from "react-native";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Linking, Pressable, View } from "react-native";
 
-import { completeTask } from "@/api/opportunities";
 import { AppText } from "@/components/AppText";
 import { Button } from "@/components/Button";
 import { Chip } from "@/components/Chip";
@@ -162,17 +160,8 @@ const GROUP_ORDER = ["Overdue", "Today", "This Week", "Later"] as const;
 
 export function TasksTab({ opp }: { opp: OpportunityDetail }) {
   const c = useColors();
-  const qc = useQueryClient();
   const [status, setStatus] = useState("pending");
   const q = useOpportunityTasks(String(opp.id), status);
-  const complete = useMutation({
-    mutationFn: completeTask,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["opportunity", String(opp.id)] });
-      void qc.invalidateQueries({ queryKey: ["smart-views"] });
-    },
-    onError: (e) => Alert.alert("Couldn't complete the task", e instanceof Error ? e.message : "Try again."),
-  });
 
   const tasks = q.data?.data ?? [];
   const groups = GROUP_ORDER.map((g) => ({
@@ -238,30 +227,6 @@ export function TasksTab({ opp }: { opp: OpportunityDetail }) {
                     Assigned to {t.assigned_to?.name ?? "—"}
                   </AppText>
                 </View>
-                {t.status === "pending" ? (
-                  <Pressable
-                    onPress={() =>
-                      Alert.alert("Mark as completed?", t.title ?? "", [
-                        { text: "Cancel", style: "cancel" },
-                        { text: "Complete", onPress: () => complete.mutate(t.id) },
-                      ])
-                    }
-                    accessibilityRole="button"
-                    accessibilityLabel="Mark as completed"
-                    hitSlop={8}
-                    style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 18,
-                      borderWidth: 1.5,
-                      borderColor: c.line,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    <Icon name="check" color={c.muted} />
-                  </Pressable>
-                ) : null}
               </View>
             );
           })}

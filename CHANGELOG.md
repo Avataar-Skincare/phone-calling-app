@@ -8,6 +8,7 @@ All notable changes to this project are documented here. The format follows
 
 ### Removed (2026-11-06)
 
+- Change Stage on the client page (`POST /opportunities/:id/stage`) and Mark as completed on task views and the Tasks tab (`POST /tasks/:id/update`). Agents change stages, record outcomes and complete tasks only on the Compass website ([ADR 0006](docs/decisions/0006-call-times-and-whatsapp.md)).
 - The outcome (dispose) form after calls and its "Waiting to send" screen. Outcomes are recorded on the Compass website ([ADR 0005](docs/decisions/0005-log-calls-as-manual-outbound-call.md)).
 
 ### Added (2026-11-06)
@@ -20,8 +21,8 @@ All notable changes to this project are documented here. The format follows
 ### Added (Compass parity, 2026-11-06)
 
 - Home is now Compass's Smart Views: Sales / Customer Support tabs, all 14 views with Compass's per-view filters (search, stage, source, owner, date type, date range with custom dates, status, task type, activity), defaults by role, sorting, "Showing X of Y" and 20 / 50 / 100 rows per page. Filters are remembered per view.
-- List cards show Compass's columns (lead score, stage, source, owner, created and modified dates; task status, due date, created by, owner). Task views can mark a task completed.
-- Lead screen is now Compass's opportunity page: header, profile panel with Call and the four tiles, Properties, Change Stage, and the Overview, Activities, Tasks, Calls, Stage History, Purchase History and Appointments tabs.
+- List cards show Compass's columns (lead score, stage, source, owner, created and modified dates; task status, due date, created by, owner).
+- Lead screen is now Compass's opportunity page: header, profile panel with Call and the four tiles, Properties, and the Overview, Activities, Tasks, Calls, Stage History, Purchase History and Appointments tabs.
 - The call banner also shows on the client's page. Calling from the list stays on the list.
 - Dates, phones, sources, money and stage colours formatted exactly like Compass (`src/lib/format.ts`).
 

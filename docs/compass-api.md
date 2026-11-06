@@ -37,16 +37,15 @@ The home screen is Compass's Smart Views page: Sales / Customer Support tabs (sh
 Sales first, like the web), the 14 view tabs, and each view's own filters, defaults and sort.
 Per-view rules live in `src/features/leads/viewConfig.ts` (tested in `viewConfig.test.ts`).
 
-| Endpoint                                           | Used for                                                                             |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `GET /opportunities/departments`                   | `[{ id, code, label }]`, maps `user.departmentId` to a code                          |
-| `GET /smart-views/definitions`                     | `[{ key, label, department: "sales" or "cs", type: "lead" or "task", description }]` |
-| `GET /smart-views/counts?department=sales`         | `{ [viewKey]: total }` (tab counts; slow, never retried)                             |
-| `GET /smart-views/data?view=&page=&limit=&…`       | `{ data: Row[], meta: { total, page, limit, total_pages } }`                         |
-| `GET /smart-views/opportunity-stages?department=`  | Stage filter options                                                                 |
-| `GET /settings/sources/dropdown`                   | Source filter options                                                                |
-| `GET /agents/dropdown`                             | Owner filter options (hidden for agents; team leads see their team)                  |
-| `POST /tasks/:id/update` `{ status: "completed" }` | "Mark as completed" on task views and the Tasks tab                                  |
+| Endpoint                                          | Used for                                                                             |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `GET /opportunities/departments`                  | `[{ id, code, label }]`, maps `user.departmentId` to a code                          |
+| `GET /smart-views/definitions`                    | `[{ key, label, department: "sales" or "cs", type: "lead" or "task", description }]` |
+| `GET /smart-views/counts?department=sales`        | `{ [viewKey]: total }` (tab counts; slow, never retried)                             |
+| `GET /smart-views/data?view=&page=&limit=&…`      | `{ data: Row[], meta: { total, page, limit, total_pages } }`                         |
+| `GET /smart-views/opportunity-stages?department=` | Stage filter options                                                                 |
+| `GET /settings/sources/dropdown`                  | Source filter options                                                                |
+| `GET /agents/dropdown`                            | Owner filter options (hidden for agents; team leads see their team)                  |
 
 `/smart-views/data` filter parameters, sent only when set (exactly as the web sends them):
 `search`, `owner`, `sort_by`, `sort_order`, `stage` / `stages`, `source`, `date_type`, `schedule`
@@ -65,7 +64,9 @@ Row shapes differ by view type. `src/features/leads/leadItem.ts` maps them all t
 ## Opportunity page
 
 Tapping a lead shows Compass's opportunity
-page: header, profile panel (Call, four tiles, Properties, Change Stage) and seven tabs. Each card
+page: header, profile panel (Call, WhatsApp, four tiles, Properties) and seven tabs. The page is
+read-only: stages, outcomes and tasks are changed on the Compass website only (ADR 0006). The app's
+only write to Compass is the call log below. Each card
 and tab loads from its own endpoint, as on the web.
 
 | Endpoint                                                                    | Where                                                |
@@ -84,7 +85,6 @@ and tab loads from its own endpoint, as on the web.
 | `GET /ameyo/opportunities/:id/calls?page=&limit=`                           | Calls tab (20 a page) and Overview call card (3)     |
 | `GET /leads/:leadId/purchase-history`                                       | Purchase History tab                                 |
 | `GET /leads/:leadId/appointments?page=&limit=10`                            | Appointments tab                                     |
-| `POST /opportunities/:id/stage` `{ opportunity_stage_id, reason? }`         | Change Stage                                         |
 
 `lead.phone` on the opportunity is the first stored number, not necessarily the primary one, so
 the app prefers the `primary_phone` it already has from the list row. Call recordings open in the

@@ -78,15 +78,5 @@ export const getOpportunityTasks = (oppId: string, status: string) =>
     limit: 50,
   });
 
-// ── Changes ─────────────────────────────────────────────────
-
-/** Change Stage (left panel). Compass checks the agent may edit this opportunity. */
-export const changeOpportunityStage = (oppId: string, stageId: string | number, reason?: string) =>
-  api.post<OpportunityDetail>(`/opportunities/${id(oppId)}/stage`, {
-    opportunity_stage_id: String(stageId),
-    ...(reason?.trim() ? { reason: reason.trim() } : {}),
-  });
-
-/** Mark a task done (Tasks tab and task Smart Views). */
-export const completeTask = (taskId: string | number) =>
-  api.post<unknown>(`/tasks/${id(taskId)}/update`, { status: "completed" });
+// No writes here: stages, outcomes and tasks are changed on the Compass website only (ADR 0006).
+// The app's only write is the call log (src/api/activities.ts).

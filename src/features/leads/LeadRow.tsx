@@ -4,7 +4,6 @@ import { Pressable, View } from "react-native";
 import { AppText } from "@/components/AppText";
 import { CallButton } from "@/components/CallButton";
 import { WhatsAppButton } from "@/components/WhatsAppButton";
-import { Icon } from "@/components/icons";
 import { Badge, StagePill } from "@/components/StagePill";
 import { formatDateIN } from "@/lib/format";
 import { maskPhone, toE164 } from "@/lib/phone";
@@ -17,8 +16,6 @@ interface Props {
   kind: RowKind;
   onOpen: (item: LeadItem) => void;
   onCall: (item: LeadItem) => void;
-  /** Task views: Compass's "Mark as completed" tick. */
-  onComplete?: (item: LeadItem) => void;
 }
 
 /** "Label value" pair in a row card (a Compass table column). */
@@ -37,7 +34,7 @@ function Field({ label, value }: { label: string; value: string }) {
  *  - Important Customers: Lead (+ phone), Stage, Owner, Last High-Intent Activity
  *  - task views: Task Id, Subject (+ lead), Status, Opportunity Stage, Due Date, Created By, Task Owner
  */
-export const LeadRow = memo(function LeadRow({ item, kind, onOpen, onCall, onComplete }: Props) {
+export const LeadRow = memo(function LeadRow({ item, kind, onOpen, onCall }: Props) {
   const c = useColors();
   const callable = !!toE164(item.phone);
 
@@ -139,25 +136,6 @@ export const LeadRow = memo(function LeadRow({ item, kind, onOpen, onCall, onCom
           <CallButton label={`Call ${item.name}`} disabled={!callable} onPress={() => onCall(item)} />
           <WhatsAppButton label={`WhatsApp ${item.name}`} phone={item.phone} />
         </View>
-        {kind === "task" && item.task?.status === "pending" && onComplete ? (
-          <Pressable
-            onPress={() => onComplete(item)}
-            accessibilityRole="button"
-            accessibilityLabel="Mark as completed"
-            hitSlop={8}
-            style={{
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              borderWidth: 1.5,
-              borderColor: c.line,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Icon name="check" color={c.muted} />
-          </Pressable>
-        ) : null}
       </View>
     </Pressable>
   );

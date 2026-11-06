@@ -1,4 +1,4 @@
-# 0006: Talk, ringing and total time on every call; WhatsApp button; no outcome screen
+# 0006: Talk, ringing and total time on every call; WhatsApp button; no outcomes, stage or task changes in the app
 
 - **Status:** Accepted
 - **Date:** 2026-11-06
@@ -49,13 +49,21 @@ both platforms:
    screen.
 5. **WhatsApp button** next to every Call button: opens `https://wa.me/<number>`, a chat with the
    client. Nothing is logged for it.
+6. **No stage or task changes in the app** (2026-11-06). Agents change stage, record outcomes and
+   complete tasks only on the Compass website, on desktop. The app shows stages and tasks but has
+   no Change Stage and no Mark as completed; it never calls `POST /opportunities/:id/stage` or
+   `POST /tasks/:id/update`. The app's job is to call, log the call, and open WhatsApp: its only
+   write to Compass is the Manual Outbound Call activity (ADR 0005).
 
 ## Consequences
 
-- **Google Play:** `READ_CALL_LOG` is allowed there only for default dialer apps, so the app is
-  distributed outside the public Play Store (direct install / EAS, or a private company listing).
-  CI now requires the permission and still refuses write access to the call log, contacts and
-  outgoing-call interception.
+- **Google Play:** `READ_CALL_LOG` is kept. Google allows it only for default dialer apps or
+  approved exceptions, declared in the Play Console permissions declaration. We try **Play Console
+  internal testing** first; if Google rejects the declaration, we fall back to installing the APK
+  directly (EAS internal distribution). CI requires the permission and still refuses write access
+  to the call log, contacts and outgoing-call interception.
+- A task (e.g. First Call) stays on the agent's lists in the app until it is completed on the
+  website.
 - Agents are asked for a third Android permission ("Call logs"). If they refuse, calls still work
   and are logged with the total only.
 - Compass needs the extra keys in the `manual_outbound_call` attributes template if they should

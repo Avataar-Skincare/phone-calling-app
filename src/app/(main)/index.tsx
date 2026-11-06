@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, View } from "react-native";
+import { ActivityIndicator, FlatList, Pressable, RefreshControl, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { router, useFocusEffect } from "expo-router";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { completeTask } from "@/api/opportunities";
 import { PAGE_SIZES } from "@/api/smartViews";
 import { AppText } from "@/components/AppText";
 import { Icon } from "@/components/icons";
@@ -38,7 +36,6 @@ const DEPARTMENTS: { code: DepartmentCode; label: string }[] = [
 /** Smart Views, as on Compass: department tabs, view sub-tabs, filters, sort, page size. */
 export default function HomeScreen() {
   const c = useColors();
-  const qc = useQueryClient();
   const user = useAuthStore((s) => s.session?.user);
   const role = user?.role ?? "agent";
   const callLead = useCallLead();
@@ -146,23 +143,6 @@ export default function HomeScreen() {
     [callLead],
   );
 
-  const complete = useMutation({
-    mutationFn: (taskId: string) => completeTask(taskId),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ["smart-views"] }),
-    onError: (e) => Alert.alert("Couldn't complete the task", e instanceof Error ? e.message : "Try again."),
-  });
-  const onComplete = useCallback(
-    (item: LeadItem) => {
-      const task = item.task;
-      if (!task) return;
-      Alert.alert("Mark as completed?", task.title ?? item.name, [
-        { text: "Cancel", style: "cancel" },
-        { text: "Complete", onPress: () => complete.mutate(task.id) },
-      ]);
-    },
-    [complete],
-  );
-
   const firstName = user?.name?.split(" ")[0] ?? "";
   const initials = (user?.name ?? "?")
     .split(" ")
@@ -198,13 +178,7 @@ export default function HomeScreen() {
         data={list.items}
         keyExtractor={(i) => i.key}
         renderItem={({ item }) => (
-          <LeadRow
-            item={item}
-            kind={config.kind}
-            onOpen={openLead}
-            onCall={onCall}
-            onComplete={config.kind === "task" ? onComplete : undefined}
-          />
+          <LeadRow item={item} kind={config.kind} onOpen={openLead} onCall={onCall} />
         )}
         contentContainerStyle={{ padding: SPACE.lg, paddingTop: SPACE.sm, gap: SPACE.sm, flexGrow: 1 }}
         keyboardShouldPersistTaps="handled"

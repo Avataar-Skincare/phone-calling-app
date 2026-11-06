@@ -200,11 +200,6 @@ export function fakeCompass() {
   on("GET", /^\/leads\/\d+$/, { body: { activities: opportunity().activities, total_activities: 1 } });
   on("GET", /^\/ameyo\/opportunities\/\d+\/calls$/, { body: empty() });
   on("GET", "/tasks", { body: empty(50) });
-  on("POST", /^\/opportunities\/\d+\/stage$/, (req) => ({
-    status: 201,
-    body: opportunity(req.path.split("/")[2]),
-  }));
-  on("POST", /^\/tasks\/\d+\/update$/, { status: 201, body: { success: true } });
 
   // Call log (ADR 0005). Like the real one: 200 with activity_id, or 200 with activity_id null.
   on("POST", "/activities/log", {

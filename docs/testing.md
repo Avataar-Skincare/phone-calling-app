@@ -44,7 +44,7 @@ Library 13. Two test doubles stand in for the outside world:
 | `tests/integration/calling.test.tsx`     | Call → events → banner → summary (talk, ringing, total) → Manual Outbound Call sent; not answered; Compass refuses → Retry; offline → waiting; next call straight after; call ended while app closed; Android permission explainer; iPhone direct; second-call guard; WhatsApp from list and client page |
 | `tests/integration/settings.test.tsx`    | Account details, logout, logout blocked during a call, SIM choice, permissions, "call still open" guard                                                                                                                                                                                                  |
 | `tests/integration/filters.test.tsx`     | Stage, source, date range (presets and custom), owner (team lead only), status filters sent like Compass; filters remembered per view; sort and rows per page                                                                                                                                            |
-| `tests/integration/opportunity.test.tsx` | Client page with data: Sales and CS Overview cards; Activities (failed dialer attempts hidden); Tasks (groups, status filter, complete); Calls (recording link, paging); Stage History; Purchase History items; Appointments                                                                             |
+| `tests/integration/opportunity.test.tsx` | Client page with data: Sales and CS Overview cards; Activities (failed dialer attempts hidden); Tasks (groups, status filter, read-only); Calls (recording link, paging); Stage History; Purchase History items; Appointments                                                                            |
 | `src/features/calling/sendCalls.test.ts` | Sent with the agent's token; activity_id null = refused; offline back-off and retry; 400 not retried; oldest first, per agent                                                                                                                                                                            |
 | `src/features/calling/callFlow.test.ts`  | Session stored before dialing; SIM choice; failure cleanup; untracked calls; call times from the call log / iOS answer, retry until the log entry appears                                                                                                                                                |
 
@@ -87,7 +87,7 @@ Without the variables every test is skipped. In CI the job runs only when the re
 - Native code itself (`SimDialerModule.kt`, `SimDialerModule.swift`): compiled in CI (Android) and by
   EAS (iOS), exercised on devices.
 - The native date-picker dialogs, real call audio and networks, and WhatsApp itself.
-- Change Stage and Mark as completed against the real Compass (contract tests are read-only by design).
+- The call log against the real Compass (contract tests are read-only by design).
 
 ## Real-device test matrix
 
