@@ -198,7 +198,7 @@ describe("finishCall", () => {
 
   it("iOS: leaves call_log_permission unset", async () => {
     await finishCall(ended("ios", 200, 9));
-    expect(useCallLog.getState().calls[0].callLogPermission).toBeNull();
+    expect(useCallLog.getState().calls[0]?.callLogPermission).toBeNull();
   });
 
   it("ignores a call that hasn't ended", async () => {

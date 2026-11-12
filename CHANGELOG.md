@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed (2026-11-12)
+
+- **Android: call-log access is now required to call from the app.** Every call checks it; without
+  it the call is blocked and the permissions screen opens. "Not now, use the dialer" is gone
+  ([ADR 0008](docs/decisions/0008-call-log-access-required.md)).
+
+### Added (2026-11-12)
+
+- Every Android call log sends `call_log_permission` (`granted` / `denied`), for Compass's Agent
+  Audit page ([ADR 0008](docs/decisions/0008-call-log-access-required.md)).
+
 ### Changed
 
 - Call logs send `occurred_at` (the call's end time), so a call queued while offline is filed in
