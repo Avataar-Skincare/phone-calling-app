@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Linking, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { AppState, Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import * as SimDialer from "@modules/sim-dialer";
@@ -26,6 +26,8 @@ export default function PermissionsScreen() {
   const [blocked, setBlocked] = useState(false);
   const [refused, setRefused] = useState(false);
 
+  const placed = useRef(false);
+
   useEffect(() => {
     SimDialer.getPermissions()
       .then((r) => setBlocked(!r.granted && !r.canAskAgain && r.status === "denied"))
@@ -33,6 +35,8 @@ export default function PermissionsScreen() {
   }, []);
 
   async function placeCall() {
+    if (placed.current) return;
+    placed.current = true;
     markSeen();
     router.back();
     if (!p.phone) return;
@@ -44,6 +48,20 @@ export default function PermissionsScreen() {
       taskId: p.taskId || null,
     }).catch(() => {});
   }
+
+  // Back from Settings with call logs turned on: place the call without another tap.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      void SimDialer.getCapabilities()
+        .then((caps) => {
+          if (caps.canReadCallLog) return placeCall();
+        })
+        .catch(() => {});
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- placeCall reads stable route params
+  }, []);
 
   async function allow() {
     setBusy(true);
@@ -108,16 +126,22 @@ export default function PermissionsScreen() {
           </AppText>
         ) : refused ? (
           <AppText tone="amber">
-            Call logs weren't allowed, so the call can't be made. Tap Allow to try again.
+            Call logs weren't allowed, so the call can't be made. Tap Allow to try again, or turn on "Call
+            logs" in Settings.
           </AppText>
         ) : null}
 
         <View style={{ gap: SPACE.md }}>
-          {blocked ? (
-            <Button title="Open Settings" onPress={() => void Linking.openSettings()} />
-          ) : (
-            <Button title="Allow" onPress={allow} loading={busy} />
-          )}
+          {blocked ? null : <Button title="Allow" onPress={allow} loading={busy} />}
+          {/* Android may refuse the prompt silently once call logs were denied for good, so Settings
+              is offered as soon as one attempt fails, not only when Android says it won't ask. */}
+          {blocked || refused ? (
+            <Button
+              title="Open Settings"
+              kind={blocked ? "primary" : "secondary"}
+              onPress={() => void Linking.openSettings()}
+            />
+          ) : null}
           <Button title="Cancel" kind="plain" onPress={() => router.back()} />
         </View>
       </View>

@@ -4,7 +4,7 @@
  * Integration: tap Call → phone call events → banner while on the call → call summary (talk,
  * ringing, total) after it ends, kept on the phone; and the WhatsApp button. Renders the real app with a fake Compass and the sim-dialer test double.
  */
-import { Alert, Linking, Platform } from "react-native";
+import { Alert, AppState, Linking, Platform } from "react-native";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
 
@@ -183,12 +183,30 @@ describe("calling a lead", () => {
 
     fireEvent.press(screen.getByLabelText("Call Asha Rao"));
     fireEvent.press(await screen.findByText("Allow"));
-    expect(
-      await screen.findByText(
-        "Call logs weren't allowed, so the call can't be made. Tap Allow to try again.",
-      ),
-    ).toBeTruthy();
+    expect(await screen.findByText(/Call logs weren't allowed, so the call can't be made/)).toBeTruthy();
+    // Android may refuse the prompt silently from now on, so Settings is offered right away.
+    expect(screen.getByText("Open Settings")).toBeTruthy();
     expect(dialer.placeCall).not.toHaveBeenCalled();
+    os.restore();
+  });
+
+  it("places the call when the agent comes back from Settings with call logs on (Android)", async () => {
+    const os = jest.replaceProperty(Platform, "OS", "android");
+    // Call-through spy: records the app's AppState listeners without replacing the real ones.
+    const appState = jest.spyOn(AppState, "addEventListener");
+    fakeCompass();
+    dialer.__setCapabilities({ canReadCallLog: false });
+    renderRouter("./src/app", { initialUrl: "/" });
+    await screen.findByLabelText("Asha Rao, open lead");
+
+    fireEvent.press(screen.getByLabelText("Call Asha Rao"));
+    expect(await screen.findByText("Allow calling from the app")).toBeTruthy();
+
+    dialer.__setCapabilities({ canReadCallLog: true }); // turned on in Settings
+    // The permissions screen mounted last, so its listener is the newest one.
+    const onChange = appState.mock.calls.at(-1)?.[1] as (s: string) => void;
+    await act(async () => onChange("active"));
+    await waitFor(() => expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null));
     os.restore();
   });
 
