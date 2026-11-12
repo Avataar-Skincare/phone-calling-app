@@ -1,4 +1,5 @@
 import * as SimDialer from "@modules/sim-dialer";
+import type { CallLogPermission } from "@/lib/callLog";
 import { callTimes, createSession, type CallSession, type CallTarget } from "@/lib/callState";
 import { useAuthStore } from "@/store/auth.store";
 import { useCallLog } from "@/store/callLog.store";
@@ -50,6 +51,12 @@ export async function finishCall(session: CallSession): Promise<void> {
   finishing.add(session.id);
   try {
     let logTalk: number | null = null;
+    let callLogPermission: CallLogPermission | null = null;
+    if (session.platform === "android" && SimDialer.isNativeDialerAvailable) {
+      // Checked at the end of the call: access can be revoked after the pre-call check (ADR 0008).
+      const caps = await SimDialer.getCapabilities().catch(() => null);
+      if (caps) callLogPermission = caps.canReadCallLog ? "granted" : "denied";
+    }
     if (session.platform === "android") {
       for (let i = 0; i < CALL_LOG_ATTEMPTS && logTalk === null; i++) {
         if (i > 0) await new Promise((r) => setTimeout(r, CALL_LOG_RETRY_MS));
@@ -64,6 +71,7 @@ export async function finishCall(session: CallSession): Promise<void> {
     const user = useAuthStore.getState().session?.user;
     useCallLog.getState().add({
       ...callTimes(session, logTalk),
+      callLogPermission,
       id: session.id,
       userId: user ? String(user.id) : null,
       agentName: user?.name ?? null,

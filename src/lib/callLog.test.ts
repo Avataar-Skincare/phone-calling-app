@@ -84,6 +84,22 @@ describe("buildCallLogRequest", () => {
     const body = buildCallLogRequest({ ...call, talkTimeSeconds: 0, ringTimeSeconds: 218, answered: false });
     expect(body.data).toMatchObject({ call_talk_seconds: 0, call_ring_seconds: 218, call_answered: "no" });
   });
+
+  it("sends call_log_permission when known (ADR 0008)", () => {
+    expect(buildCallLogRequest({ ...call, callLogPermission: "denied" }).data.call_log_permission).toBe(
+      "denied",
+    );
+    expect(buildCallLogRequest({ ...call, callLogPermission: "granted" }).data.call_log_permission).toBe(
+      "granted",
+    );
+  });
+
+  it("omits call_log_permission when null or missing (iOS, older stored calls)", () => {
+    expect(buildCallLogRequest({ ...call, callLogPermission: null }).data).not.toHaveProperty(
+      "call_log_permission",
+    );
+    expect(buildCallLogRequest(call).data).not.toHaveProperty("call_log_permission");
+  });
 });
 
 describe("compassPhone", () => {

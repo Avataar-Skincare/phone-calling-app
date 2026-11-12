@@ -23,7 +23,14 @@ export interface CallForLog extends CallTimes {
   startedAt: number | null;
   endedAt: number;
   approximate: boolean;
+  /**
+   * Android: whether the app could read the call log when the call ended (ADR 0008). null on iOS
+   * and without the native module; missing on calls stored by older app versions.
+   */
+  callLogPermission?: CallLogPermission | null;
 }
+
+export type CallLogPermission = "granted" | "denied";
 
 export interface CallLogRequest {
   phone: string;
@@ -53,7 +60,8 @@ const shown = toIstDateTime;
  *   call_duration_seconds  total: call start → end (tap time only if no start event)
  *   call_talk_seconds      talk time (iOS: answer → end; Android: call log)
  *   call_ring_seconds      total − talk
- * Talk and ring are left out when unknown.
+ *   call_log_permission    Android only: "granted" | "denied" (ADR 0008)
+ * Talk, ring and call_log_permission are left out when unknown.
  */
 export function buildCallLogRequest(call: CallForLog): CallLogRequest {
   const data: Record<string, string | number> = {
@@ -72,6 +80,7 @@ export function buildCallLogRequest(call: CallForLog): CallLogRequest {
   if (call.talkTimeSeconds !== null) data.call_talk_seconds = call.talkTimeSeconds;
   if (call.ringTimeSeconds !== null) data.call_ring_seconds = call.ringTimeSeconds;
   if (call.simId) data.call_sim = call.simId;
+  if (call.callLogPermission) data.call_log_permission = call.callLogPermission;
 
   return {
     phone: compassPhone(call.phone),
