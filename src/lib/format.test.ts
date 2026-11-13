@@ -2,6 +2,7 @@
 import {
   formatCallDuration,
   formatDateIN,
+  formatFileSize,
   formatLongIN,
   formatPhoneCompass,
   formatRupees,
@@ -104,5 +105,13 @@ describe("grouping (IST)", () => {
     expect(taskDueGroup("2026-11-07T06:00:00Z", "pending", now)).toBe("This Week"); // Saturday
     expect(taskDueGroup("2026-11-10T06:00:00Z", "pending", now)).toBe("Later");
     expect(taskDueGroup(null, "pending", now)).toBe("Later");
+  });
+});
+
+describe("formatFileSize", () => {
+  it("uses MB, KB and bytes", () => {
+    expect(formatFileSize(2_100_000)).toBe("2.1 MB");
+    expect(formatFileSize(340_400)).toBe("340 KB");
+    expect(formatFileSize(800)).toBe("800 B");
   });
 });

@@ -49,6 +49,26 @@ export interface CallLogEntry {
   startedAt: number;
 }
 
+/** A folder the agent granted read access to (Android Storage Access Framework tree). */
+export interface RecordingsFolder {
+  /** content:// tree URI; the app stores it and re-checks it with getRecordingsFolder(). */
+  uri: string;
+  /** Folder display name, e.g. "Call". */
+  name: string;
+}
+
+/** An audio file found in the recordings folder. */
+export interface RecordingFile {
+  /** content:// document URI, readable with the folder grant. */
+  uri: string;
+  name: string;
+  sizeBytes: number;
+  /** epoch ms */
+  lastModified: number;
+  /** May be empty when the provider doesn't report one. */
+  mimeType: string;
+}
+
 export interface Sim {
   id: string;
   label: string;
@@ -67,6 +87,15 @@ interface NativeSimDialer {
   listSims(): Promise<Sim[]>;
   placeCall(number: string, simId: string | null): Promise<PlaceCallResult>;
   lastCallFromLog(number: string, sinceMs: number): Promise<CallLogEntry | null>;
+  pickRecordingsFolder(): Promise<RecordingsFolder | null>;
+  getRecordingsFolder(uri: string): Promise<RecordingsFolder | null>;
+  listRecordings(treeUri: string, fromMs: number, toMs: number): Promise<RecordingFile[]>;
+  uploadRecording(
+    fileUri: string,
+    url: string,
+    contentType: string,
+    sizeBytes: number,
+  ): Promise<{ status: number }>;
 }
 
 const native = requireOptionalNativeModule<NativeSimDialer>("SimDialer");
@@ -122,6 +151,42 @@ export async function placeCall(e164: string, simId?: string | null): Promise<Pl
  */
 export function getLastCallFromLog(e164: string, sinceMs: number): Promise<CallLogEntry | null> {
   return native && Platform.OS === "android" ? native.lastCallFromLog(e164, sinceMs) : Promise.resolve(null);
+}
+
+/** Android: open the system folder picker (read access only). null when cancelled or unavailable. */
+export function pickRecordingsFolder(): Promise<RecordingsFolder | null> {
+  return native && Platform.OS === "android" ? native.pickRecordingsFolder() : Promise.resolve(null);
+}
+
+/** The folder, only while its persisted read access still exists; null when lost or unavailable. */
+export function getRecordingsFolder(uri: string): Promise<RecordingsFolder | null> {
+  return native && Platform.OS === "android" ? native.getRecordingsFolder(uri) : Promise.resolve(null);
+}
+
+/**
+ * Android: audio files in the folder (plus one level of sub-folders) last modified within
+ * [fromMs, toMs], newest first, at most 50. [] when access was revoked or unavailable.
+ */
+export function listRecordings(treeUri: string, fromMs: number, toMs: number): Promise<RecordingFile[]> {
+  return native && Platform.OS === "android"
+    ? native.listRecordings(treeUri, fromMs, toMs)
+    : Promise.resolve([]);
+}
+
+/**
+ * Android: HTTP PUT the file's bytes to `url` with exactly `Content-Type: contentType` and
+ * `Content-Length: sizeBytes`. Resolves the HTTP status (non-2xx is NOT thrown); throws on an IO
+ * failure, and when unavailable (iOS, no native module).
+ */
+export function uploadRecording(
+  fileUri: string,
+  url: string,
+  contentType: string,
+  sizeBytes: number,
+): Promise<{ status: number }> {
+  if (native && Platform.OS === "android")
+    return native.uploadRecording(fileUri, url, contentType, sizeBytes);
+  return Promise.reject(new Error("Recording upload is Android only"));
 }
 
 export function addCallStateListener(listener: (e: CallStateEvent) => void): { remove: () => void } {

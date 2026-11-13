@@ -1,16 +1,19 @@
 package com.avataarskin.simdialer
 
 import android.Manifest
+import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.database.Cursor
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.CallLog
+import android.provider.DocumentsContract
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.telephony.PhoneStateListener
@@ -20,8 +23,12 @@ import expo.modules.interfaces.permissions.Permissions
 import expo.modules.kotlin.Promise
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.exception.Exceptions
+import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.io.IOException
+import java.net.HttpURLConnection
+import java.net.URL
 
 /**
  * Android half of `SimDialer`. The JS contract lives in `modules/sim-dialer/index.ts`; function
@@ -50,6 +57,9 @@ class SimDialerModule : Module() {
   /** TelephonyCallback (API 31+) or PhoneStateListener (older). Null while not tracking. */
   @Volatile private var listener: Any? = null
   private val main = Handler(Looper.getMainLooper())
+
+  /** Pending `pickRecordingsFolder` promise, resolved from OnActivityResult. */
+  @Volatile private var pendingPick: Promise? = null
 
   override fun definition() = ModuleDefinition {
     Name("SimDialer")
@@ -96,6 +106,63 @@ class SimDialerModule : Module() {
     AsyncFunction("lastCallFromLog") { number: String, sinceMs: Double ->
       lastCallFromLog(number, sinceMs)
     }
+
+    /** Opens the system folder picker; resolves {uri, name} or null when cancelled. Read access only. */
+    AsyncFunction("pickRecordingsFolder") { promise: Promise ->
+      val activity = appContext.currentActivity
+      if (activity == null) {
+        promise.reject(CodedException("E_NO_ACTIVITY", "No screen to show the folder picker on.", null))
+      } else {
+        pendingPick?.resolve(null)
+        pendingPick = promise
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(
+          Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        )
+        try {
+          activity.startActivityForResult(intent, PICK_FOLDER_REQUEST)
+        } catch (e: ActivityNotFoundException) {
+          pendingPick = null
+          promise.reject(CodedException("E_NO_PICKER", "This phone has no folder picker.", null))
+        }
+      }
+    }
+
+    OnActivityResult { _, payload ->
+      if (payload.requestCode == PICK_FOLDER_REQUEST) {
+        val promise = pendingPick
+        pendingPick = null
+        val uri = if (payload.resultCode == Activity.RESULT_OK) payload.data?.data else null
+        if (promise != null) {
+          if (uri == null) {
+            promise.resolve(null)
+          } else {
+            try {
+              context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+              promise.resolve(mapOf("uri" to uri.toString(), "name" to folderName(uri)))
+            } catch (e: SecurityException) {
+              promise.resolve(null)
+            }
+          }
+        }
+      }
+    }
+
+    /** The folder, only while its persisted read permission still exists; otherwise null. */
+    AsyncFunction("getRecordingsFolder") { uri: String ->
+      val target = Uri.parse(uri)
+      val kept = context.contentResolver.persistedUriPermissions.any { it.uri == target && it.isReadPermission }
+      if (kept) mapOf("uri" to uri, "name" to folderName(target)) else null
+    }
+
+    /** Audio files in the folder (and one level of sub-folders) modified in [fromMs, toMs], newest first, max 50. */
+    AsyncFunction("listRecordings") { treeUri: String, fromMs: Double, toMs: Double ->
+      listRecordings(Uri.parse(treeUri), fromMs.toLong(), toMs.toLong())
+    }
+
+    /** PUT the file's bytes to `url`; returns {status}. Non-2xx statuses are returned, IO failures throw. */
+    AsyncFunction("uploadRecording") { fileUri: String, url: String, contentType: String, sizeBytes: Double ->
+      uploadRecording(Uri.parse(fileUri), url, contentType, sizeBytes.toLong())
+    }.runOnQueue(Queues.DEFAULT)
   }
 
   // ── Permissions ────────────────────────────────────────────────────────────────────────────
@@ -266,7 +333,122 @@ class SimDialerModule : Module() {
     }
   }
 
+  // ── Call recordings (read-only folder grant) ───────────────────────────────────────────────
+
+  private fun folderName(treeUri: Uri): String {
+    val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri))
+    val name = try {
+      context.contentResolver.query(docUri, arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME), null, null, null)
+        ?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+    } catch (e: Exception) {
+      null
+    }
+    return name ?: (treeUri.lastPathSegment?.substringAfterLast(':') ?: "Folder")
+  }
+
+  private fun isAudio(name: String, mime: String?): Boolean =
+    (mime?.startsWith("audio/") == true) || name.substringAfterLast('.', "").lowercase() in AUDIO_EXTENSIONS
+
+  private fun listRecordings(treeUri: Uri, fromMs: Long, toMs: Long): List<Map<String, Any>> {
+    val out = ArrayList<Map<String, Any>>()
+    try {
+      collect(treeUri, DocumentsContract.getTreeDocumentId(treeUri), 1, fromMs, toMs, out)
+    } catch (e: SecurityException) {
+      return emptyList()
+    }
+    return out.sortedByDescending { it["lastModified"] as Double }.take(MAX_RECORDINGS)
+  }
+
+  /** Adds matching files under `parentId`, recursing into sub-folders `depth` more levels. */
+  private fun collect(
+    treeUri: Uri,
+    parentId: String,
+    depth: Int,
+    fromMs: Long,
+    toMs: Long,
+    out: MutableList<Map<String, Any>>,
+  ) {
+    val children = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentId)
+    val subDirs = ArrayList<String>()
+    val cursor: Cursor = context.contentResolver.query(
+      children,
+      arrayOf(
+        DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+        DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+        DocumentsContract.Document.COLUMN_MIME_TYPE,
+        DocumentsContract.Document.COLUMN_SIZE,
+        DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+      ),
+      null, null, null,
+    ) ?: return
+    cursor.use { c ->
+      while (c.moveToNext()) {
+        val id = c.getString(0) ?: continue
+        val name = c.getString(1) ?: ""
+        val mime = c.getString(2)
+        if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+          if (depth > 0) subDirs.add(id)
+          continue
+        }
+        val modified = if (c.isNull(4)) 0L else c.getLong(4)
+        if (!isAudio(name, mime) || modified < fromMs || modified > toMs) continue
+        out.add(
+          mapOf(
+            "uri" to DocumentsContract.buildDocumentUriUsingTree(treeUri, id).toString(),
+            "name" to name,
+            "sizeBytes" to (if (c.isNull(3)) 0L else c.getLong(3)).toDouble(),
+            "lastModified" to modified.toDouble(),
+            "mimeType" to (mime ?: ""),
+          )
+        )
+      }
+    }
+    subDirs.forEach { collect(treeUri, it, depth - 1, fromMs, toMs, out) }
+  }
+
+  /** Streams the file to `url` with a fixed-length PUT. Returns the HTTP status; throws only on IO failure. */
+  private fun uploadRecording(fileUri: Uri, url: String, contentType: String, sizeBytes: Long): Map<String, Any> {
+    var conn: HttpURLConnection? = null
+    try {
+      conn = URL(url).openConnection() as HttpURLConnection
+      conn.requestMethod = "PUT"
+      conn.doOutput = true
+      conn.connectTimeout = 30_000
+      conn.readTimeout = 120_000
+      conn.setFixedLengthStreamingMode(sizeBytes)
+      conn.setRequestProperty("Content-Type", contentType)
+      val input = context.contentResolver.openInputStream(fileUri)
+        ?: throw IOException("Can't open the recording file.")
+      input.use { ins ->
+        conn.outputStream.use { os ->
+          val buf = ByteArray(64 * 1024)
+          while (true) {
+            val n = ins.read(buf)
+            if (n < 0) break
+            os.write(buf, 0, n)
+          }
+        }
+      }
+      val status = conn.responseCode
+      try {
+        (if (status in 200..299) conn.inputStream else conn.errorStream)?.close()
+      } catch (e: IOException) {
+        // Body not needed.
+      }
+      return mapOf("status" to status)
+    } catch (e: IOException) {
+      throw CodedException("E_UPLOAD_IO", e.message ?: "Upload failed: network error.", e)
+    } catch (e: SecurityException) {
+      throw CodedException("E_UPLOAD_IO", "No access to the recording file any more.", e)
+    } finally {
+      conn?.disconnect()
+    }
+  }
+
   companion object {
+    private const val PICK_FOLDER_REQUEST = 7311
+    private const val MAX_RECORDINGS = 50
+    private val AUDIO_EXTENSIONS = setOf("m4a", "aac", "mp3", "wav", "amr", "3gp", "3gpp", "ogg", "opus", "webm")
     private val PERMISSIONS = arrayOf(
       Manifest.permission.CALL_PHONE,
       Manifest.permission.READ_PHONE_STATE,

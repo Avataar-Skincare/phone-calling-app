@@ -156,6 +156,8 @@ function CallingSection({ perm, sims, reload }: ReturnType<typeof useCallingSett
         ) : null}
       </View>
 
+      <RecordingsFolderCard />
+
       {sims.length > 1 ? (
         <View
           style={{ backgroundColor: c.surface, borderRadius: RADIUS.md, borderWidth: 1, borderColor: c.line }}
@@ -202,6 +204,66 @@ function CallingSection({ perm, sims, reload }: ReturnType<typeof useCallingSett
           })}
         </View>
       ) : null}
+    </View>
+  );
+}
+
+/**
+ * Where the phone dialer saves call recordings (ADR 0007). Picked once; the app then finds each
+ * call's file itself. Access can be taken away in Android's settings, so it is re-checked on focus.
+ */
+function RecordingsFolderCard() {
+  const c = useColors();
+  const folder = useSettingsStore((s) => s.recordingsFolder);
+  const setFolder = useSettingsStore((s) => s.setRecordingsFolder);
+  const [error, setError] = useState<string | null>(null);
+
+  useFocusEffect(
+    useCallback(() => {
+      const stored = useSettingsStore.getState().recordingsFolder;
+      if (!stored) return;
+      void SimDialer.getRecordingsFolder(stored.uri)
+        .then((still) => {
+          if (!still) setFolder(null); // access was lost: show it as not set
+        })
+        .catch(() => {});
+    }, [setFolder]),
+  );
+
+  async function choose() {
+    setError(null);
+    try {
+      const picked = await SimDialer.pickRecordingsFolder();
+      if (picked) setFolder(picked);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't open the folder picker.");
+    }
+  }
+
+  return (
+    <View
+      style={{
+        backgroundColor: c.surface,
+        borderRadius: RADIUS.md,
+        borderWidth: 1,
+        borderColor: c.line,
+        padding: SPACE.lg,
+        gap: SPACE.sm,
+      }}
+    >
+      <AppText variant="label">Call recordings folder</AppText>
+      <AppText tone={folder ? "accent" : "muted"}>{folder ? folder.name : "Not set"}</AppText>
+      <AppText variant="small" tone="muted">
+        Where your phone saves call recordings, e.g. Samsung: Recordings/Call, Xiaomi:
+        MIUI/sound_recorder/call_rec. The app only reads it, to upload a call's recording after you tap
+        Upload.
+      </AppText>
+      {error ? (
+        <AppText variant="small" tone="red">
+          {error}
+        </AppText>
+      ) : null}
+      <Button title={folder ? "Change" : "Choose folder"} kind="secondary" onPress={() => void choose()} />
     </View>
   );
 }

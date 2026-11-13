@@ -4,6 +4,18 @@ import { persist } from "zustand/middleware";
 import type { CallForLog } from "@/lib/callLog";
 import { persistStorage } from "./persistStorage";
 
+/** A phone-dialer recording being uploaded for a call, or already uploaded (ADR 0007). */
+export interface CallRecording {
+  status: "uploading" | "uploaded" | "failed";
+  fileUri: string;
+  fileName: string;
+  sizeBytes: number;
+  contentType: string;
+  error: string | null;
+  /** epoch ms */
+  uploadedAt: number | null;
+}
+
 /**
  * A call placed from the app, with its times, and whether it has reached Compass as a
  * "Manual Outbound Call" activity (ADR 0005). Kept on the phone so nothing is lost offline.
@@ -19,6 +31,8 @@ export interface FinishedCall extends CallForLog {
   nextAttemptAt: number;
   lastError: string | null;
   activityId: string | null;
+  /** The call recording the agent uploaded (ADR 0007). Missing on calls without one. */
+  recording?: CallRecording;
   /** The agent closed the summary card. */
   dismissed: boolean;
 }

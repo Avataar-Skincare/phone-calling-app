@@ -56,6 +56,23 @@ public class SimDialerModule: Module {
       nil
     }
 
+    // Call recordings are Android only (folder grant + file upload); iOS has no equivalent.
+    AsyncFunction("pickRecordingsFolder") { () -> [String: String]? in
+      nil
+    }
+
+    AsyncFunction("getRecordingsFolder") { (_: String) -> [String: String]? in
+      nil
+    }
+
+    AsyncFunction("listRecordings") { (_: String, _: Double, _: Double) -> [[String: Any]] in
+      []
+    }
+
+    AsyncFunction("uploadRecording") { (_: String, _: String, _: String, _: Double, promise: Promise) in
+      promise.reject("E_UNSUPPORTED", "Recording upload is Android only")
+    }
+
     AsyncFunction("placeCall") { (number: String, _: String?, promise: Promise) in
       let allowed = CharacterSet(charactersIn: "+0123456789")
       let cleaned = String(number.unicodeScalars.filter { allowed.contains($0) })

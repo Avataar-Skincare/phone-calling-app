@@ -54,6 +54,10 @@ function messageFrom(body: NestErrorBody | null, status: number): string {
   const m = body?.message;
   if (Array.isArray(m) && m.length) return m.join("\n");
   if (typeof m === "string" && m) return m;
+  // Some endpoints reply { message: { code, message } } (mobile-dialer recordings).
+  if (m && typeof m === "object" && !Array.isArray(m) && typeof m.message === "string" && m.message) {
+    return m.message;
+  }
   if (status >= 500) return "Compass had a problem. Try again in a minute.";
   return body?.error || `Request failed (${status})`;
 }

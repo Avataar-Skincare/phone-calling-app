@@ -27,6 +27,15 @@ describe("sim-dialer without the native module", () => {
     await expect(SimDialer.getLastCallFromLog("+919876500001", 0)).resolves.toBeNull();
   });
 
+  it("has no recordings support", async () => {
+    await expect(SimDialer.pickRecordingsFolder()).resolves.toBeNull();
+    await expect(SimDialer.getRecordingsFolder("content://x")).resolves.toBeNull();
+    await expect(SimDialer.listRecordings("content://x", 0, 1)).resolves.toEqual([]);
+    await expect(SimDialer.uploadRecording("content://f", "https://s3", "audio/mp4", 1)).rejects.toThrow(
+      "Android only",
+    );
+  });
+
   it("dials with a tel: link", async () => {
     const open = jest.spyOn(Linking, "openURL").mockResolvedValue(true);
     await expect(SimDialer.placeCall("+919876500001", "sim-1")).resolves.toBe("dialer");

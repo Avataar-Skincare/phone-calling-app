@@ -8,6 +8,7 @@ import { useAuthStore } from "@/store/auth.store";
 import { useCallLog, type FinishedCall } from "@/store/callLog.store";
 import { useCallStore } from "@/store/call.store";
 import { RADIUS, SPACE, useColors } from "@/theme/tokens";
+import { RecordingRow, canUploadRecording } from "@/features/recordings/RecordingRow";
 import { discardFailedCalls, retryAllCalls } from "./sendCalls";
 
 /**
@@ -52,30 +53,27 @@ function CallStatus() {
   return (
     <View
       accessibilityLiveRegion="polite"
-      style={{
-        ...strip,
-        backgroundColor: tone === "accent" ? c.accentSoft : c.amberSoft,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: SPACE.md,
-      }}
+      style={{ ...strip, backgroundColor: tone === "accent" ? c.accentSoft : c.amberSoft }}
     >
-      <View style={{ flex: 1, gap: 2 }}>
-        <AppText variant="label" tone={tone}>
-          {title}
-        </AppText>
-        <AppText variant="small" tone="muted">
-          {detail}
-        </AppText>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: SPACE.md }}>
+        <View style={{ flex: 1, gap: 2 }}>
+          <AppText variant="label" tone={tone}>
+            {title}
+          </AppText>
+          <AppText variant="small" tone="muted">
+            {detail}
+          </AppText>
+        </View>
+        <Pressable
+          onPress={() => dismiss(last.id)}
+          accessibilityRole="button"
+          accessibilityLabel="Close call summary"
+          hitSlop={10}
+        >
+          <Icon name="close" color={c.muted} />
+        </Pressable>
       </View>
-      <Pressable
-        onPress={() => dismiss(last.id)}
-        accessibilityRole="button"
-        accessibilityLabel="Close call summary"
-        hitSlop={10}
-      >
-        <Icon name="close" color={c.muted} />
-      </Pressable>
+      {canUploadRecording(last) ? <RecordingRow call={last} /> : null}
     </View>
   );
 }

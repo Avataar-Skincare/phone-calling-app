@@ -66,7 +66,7 @@ Row shapes differ by view type. `src/features/leads/leadItem.ts` maps them all t
 Tapping a lead shows Compass's opportunity
 page: header, profile panel (Call, WhatsApp, four tiles, Properties) and seven tabs. The page is
 read-only: stages, outcomes and tasks are changed on the Compass website only (ADR 0006). The app's
-only write to Compass is the call log below. Each card
+only writes to Compass are the call log and the recording upload below. Each card
 and tab loads from its own endpoint, as on the web.
 
 | Endpoint                                                                    | Where                                                |
@@ -130,3 +130,26 @@ change before an app build sends this field**: older Compass rejects unknown fie
 Replies **200 even on failure**: `{ "activity_id": null, "message": "<reason>" }`. Success has a
 non-null `activity_id`. The `manual_outbound_call` activity type must exist in each Compass
 (Settings → Activity Types, see ADR 0005). `/opportunities/:id/activity-form` is no longer used.
+
+## Call recording upload
+
+[ADR 0007](decisions/0007-call-recording-upload.md); `src/api/recordings.ts`,
+`src/features/recordings/uploadRecording.ts`. `:activityId` is the `activity_id` of the call's log.
+All with the agent's token except step 2.
+
+1. `POST /mobile-dialer/recordings/:activityId/upload-url`, body
+   `{ "content_type": "audio/mp4", "size_bytes": 2100000 }` replies
+   `{ "upload_url": "<presigned S3 URL>", "method": "PUT", "headers": { "Content-Type": "audio/mp4" }, "key": "recordings/manual/8001.m4a", "expires_at": "<ISO>" }`.
+   Rules: the agent's own `manual_outbound_call`, at most 7 days old; audio only (`audio/mp4`,
+   `m4a`, `x-m4a`, `aac`, `mpeg`, `mp3`, `wav`, `x-wav`, `wave`, `amr`, `3gpp`, `ogg`, `opus`,
+   `webm`); 1 byte to 25 MB (26,214,400).
+   Errors are NestJS `{ statusCode, message: { code, message } | string }`: 400 `UNSUPPORTED_TYPE`,
+   `BAD_SIZE`, `NOT_AN_APP_CALL`, `TOO_OLD`; 403 `NOT_YOUR_CALL`; 404 `CALL_NOT_FOUND`. The app shows
+   the server's `message` text.
+2. `PUT <upload_url>` straight to S3 from native code: the raw file bytes, exactly
+   `Content-Type: <headers["Content-Type"]>` and `Content-Length: <size_bytes>` (both are signed),
+   **no Authorization header**. The link is valid 10 minutes. A non-2xx is shown as "Upload refused
+   by storage (403)".
+3. `POST /mobile-dialer/recordings/:activityId/complete`, body `{ "key": "<key from step 1>" }`
+   replies `{ "recording_url": "...", "size_bytes": 2100000 }`. 400 `NOT_UPLOADED` (S3 doesn't have
+   the file yet), `KEY_MISMATCH`.
