@@ -20,7 +20,7 @@ export async function resetAppState() {
   useAuthStore.setState({ session: null, hydrated: false });
   useCallStore.setState({ session: null });
   useCallLog.setState({ calls: [] });
-  useSettingsStore.setState({ simId: null, permissionIntroSeen: false });
+  useSettingsStore.setState({ simId: null, permissionIntroSeen: false, recordingsFolder: null });
   useViewFilters.setState({ byView: {}, pageSize: 20, department: null, selectedView: {} });
   await AsyncStorage.clear();
   (SecureStore as unknown as { __reset: () => void }).__reset();

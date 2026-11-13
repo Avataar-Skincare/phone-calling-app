@@ -158,6 +158,6 @@ export interface OpportunityDetail {
 /** Error body NestJS returns for HttpException. */
 export interface NestErrorBody {
   statusCode?: number;
-  message?: string | string[];
+  message?: string | string[] | { code?: string; message?: string };
   error?: string;
 }

@@ -144,3 +144,10 @@ export function taskDueGroup(
   if (diff < 7 - istWeekday(now)) return "This Week";
   return "Later";
 }
+
+/** "2.1 MB", "340 KB", "800 B". */
+export function formatFileSize(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1_000) return `${Math.round(bytes / 1_000)} KB`;
+  return `${bytes} B`;
+}

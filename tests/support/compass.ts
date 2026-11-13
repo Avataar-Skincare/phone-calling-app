@@ -211,6 +211,23 @@ export function fakeCompass() {
     },
   });
 
+  // Call recording upload (ADR 0007): a presigned PUT link, then "complete".
+  on("POST", /^\/mobile-dialer\/recordings\/\d+\/upload-url$/, (req) => ({
+    body: {
+      upload_url: "https://s3.example/recordings/manual/8001.m4a?X-Amz-Signature=sig",
+      method: "PUT",
+      headers: { "Content-Type": (req.body as { content_type: string }).content_type },
+      key: "recordings/manual/8001.m4a",
+      expires_at: "2099-01-01T00:10:00.000Z",
+    },
+  }));
+  on("POST", /^\/mobile-dialer\/recordings\/\d+\/complete$/, (req) => ({
+    body: {
+      recording_url: `https://cdn.example/${(req.body as { key: string }).key}`,
+      size_bytes: 2_100_000,
+    },
+  }));
+
   const fetchMock = jest.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     const path = url.pathname.replace(/^\/api/, "");

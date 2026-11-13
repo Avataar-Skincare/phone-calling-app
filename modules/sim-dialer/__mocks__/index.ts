@@ -12,6 +12,8 @@ import type {
   NativeCallState,
   PermissionResponse,
   PlaceCallResult,
+  RecordingFile,
+  RecordingsFolder,
   Sim,
 } from "../index";
 
@@ -32,6 +34,11 @@ let permissions: PermissionResponse = { status: "granted", granted: true, canAsk
 let callState: NativeCallState | "unknown" = "idle";
 let sims: Sim[] = [{ id: "sim-1", label: "Jio" }];
 
+/** The folder the picker returns and getRecordingsFolder() recognises; null = none / access lost. */
+let recordingsFolder: RecordingsFolder | null = null;
+let recordings: RecordingFile[] = [];
+let uploadStatus = 200;
+
 export const isNativeDialerAvailable = true;
 
 export const getPermissions = jest.fn(async () => permissions);
@@ -44,6 +51,18 @@ export const placeCall = jest.fn(async (_e164: string, _simId?: string | null): 
   capabilities.canDirectDial ? "direct" : "dialer",
 );
 export const getLastCallFromLog = jest.fn(async (_e164: string, _sinceMs: number) => callLog);
+export const pickRecordingsFolder = jest.fn(async () => recordingsFolder);
+export const getRecordingsFolder = jest.fn(async (uri: string) =>
+  recordingsFolder && recordingsFolder.uri === uri ? recordingsFolder : null,
+);
+export const listRecordings = jest.fn(async (_tree: string, fromMs: number, toMs: number) =>
+  recordings.filter((r) => r.lastModified >= fromMs && r.lastModified <= toMs),
+);
+export const uploadRecording = jest.fn(
+  async (_fileUri: string, _url: string, _contentType: string, _sizeBytes: number) => ({
+    status: uploadStatus,
+  }),
+);
 export const addCallStateListener = jest.fn((l: Listener) => {
   listeners.add(l);
   return { remove: () => listeners.delete(l) };
@@ -73,6 +92,21 @@ export function __setSims(s: Sim[]) {
   sims = s;
 }
 
+/** The folder the picker returns; getRecordingsFolder() recognises it. null = none / access lost. */
+export function __setRecordingsFolder(f: RecordingsFolder | null) {
+  recordingsFolder = f;
+}
+
+/** Files listRecordings() returns (filtered by the requested time window). */
+export function __setRecordings(r: RecordingFile[]) {
+  recordings = r;
+}
+
+/** HTTP status uploadRecording() resolves with. */
+export function __setUploadStatus(status: number) {
+  uploadStatus = status;
+}
+
 export function __reset() {
   listeners.clear();
   capabilities = { ...ANDROID };
@@ -80,6 +114,9 @@ export function __reset() {
   permissions = { status: "granted", granted: true, canAskAgain: true };
   callState = "idle";
   sims = [{ id: "sim-1", label: "Jio" }];
+  recordingsFolder = null;
+  recordings = [];
+  uploadStatus = 200;
   [
     getPermissions,
     requestPermissions,
@@ -89,5 +126,9 @@ export function __reset() {
     listSims,
     placeCall,
     getLastCallFromLog,
+    pickRecordingsFolder,
+    getRecordingsFolder,
+    listRecordings,
+    uploadRecording,
   ].forEach((f) => f.mockClear());
 }

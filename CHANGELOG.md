@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (2026-11-13)
+
+- **Android: upload the phone dialer's call recording with one tap.** Pick the dialer's recordings
+  folder once in Settings (read-only folder access, no new permission); after each answered call
+  the summary card finds the matching file and uploads it to Compass ("Recording found" →
+  **Upload**, or **Choose file** when nothing matched), then shows "Recording uploaded". Uses
+  Compass's `/mobile-dialer/recordings/*` endpoints
+  ([ADR 0007](docs/decisions/0007-call-recording-upload.md)). iPhone: not included.
+  **Needs a new store build** (native code in `modules/sim-dialer`).
+
 ### Changed (2026-11-12)
 
 - **Android: call-log access is now required to call from the app.** Every call checks it; without

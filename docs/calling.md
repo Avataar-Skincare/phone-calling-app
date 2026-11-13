@@ -85,6 +85,26 @@ A new call can start while the last one is still being finished.
 WhatsApp chat with the client on Android and iPhone, or WhatsApp's web page when the app isn't
 installed. It needs no permission and doesn't touch the call session.
 
+## Call recordings (Android)
+
+[ADR 0007](decisions/0007-call-recording-upload.md). The app can't record calls; the agent records
+with the phone's own dialer and the app uploads that file.
+
+- **Settings → Calling → Call recordings folder**: the agent picks the dialer's folder once
+  (Samsung `Recordings/Call`, Xiaomi `MIUI/sound_recorder/call_rec`). Read-only access to that
+  folder only; no storage permission. Re-checked on focus; if Android revoked it, shown as "Not set".
+- **Summary card** (`RecordingRow`, answered Android calls only): lists the folder for the call
+  window (`recordingWindow` in `src/lib/recordingMatch.ts`: tap − 1 min to end + 10 min), rescans
+  every 5 s up to 6 times, and shows "Recording found · time · size" with **Upload**; "No recording
+  found" with **Choose file** (that folder's audio from the last 2 hours); or a link to Settings
+  when no folder is set. Then "Uploading…", "Recording uploaded ✓", or the error with **Retry**.
+- `uploadRecording(callId, file)` (`src/features/recordings/uploadRecording.ts`) needs the call's
+  `activityId`; runs upload-url → native PUT → complete (see [compass-api.md](compass-api.md#call-recording-upload));
+  stores the result in `FinishedCall.recording`; ignores a second tap while uploading.
+- Native: `pickRecordingsFolder`, `getRecordingsFolder`, `listRecordings`, `uploadRecording` in
+  `modules/sim-dialer`. iOS returns null / [] and rejects the upload ("Recording upload is Android
+  only"); the UI is hidden there.
+
 ## Permissions (Android)
 
 **Call-log access is required to call from the app** ([ADR 0008](decisions/0008-call-log-access-required.md)).
