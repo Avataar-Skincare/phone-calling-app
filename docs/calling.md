@@ -161,6 +161,30 @@ Every Android call log also sends `call_log_permission: "granted" | "denied"`, r
 ends, so Compass's Agent Audit can count calls whose talk time is unknown (access turned off
 mid-call). iOS sends nothing.
 
+### "Before you start" check ([ADR 0011](decisions/0011-startup-check-and-call-diag.md))
+
+Some phones (Xiaomi, Realme, Oppo) hide the call log even when Android says access is granted. So
+`StartupCheck` (`src/features/setup/`) also looks when the main screens mount and each time the app
+returns to the foreground (at most once a second). Rules are in `src/lib/startupCheck.ts`:
+
+- **Required, no Skip:** phone access missing; call-log access missing.
+- **Warning, Skip is quiet for 24 h:** call-log access is on but `callLogVisibleCount()` is 0.
+- **Tip, never blocks:** Google Phone share steps. The recordings folder is not asked for on this
+  screen; agents set it in Settings (or on the recording screen).
+
+`src/app/(main)/setup-check.tsx` ("Before you start") opens by itself for a required issue or an
+un-skipped warning. Continue is enabled when nothing required is left. Settings has **Check my
+phone** to open it by hand. On Google Phone the recording screen shows the share steps first and
+"Choose folder" second.
+
+New native functions (Android; iOS returns -1 / nil / neutral): `callLogVisibleCount()`,
+`defaultDialerPackage()`, `callLogLookupDebug(number, sinceMs)`. Each has a safe fallback in
+`index.ts` for iOS, Expo Go and older builds.
+
+When talk time is missing, `finishCall` also stores `call_diag` (permission states, whether the log
+is visible, why the lookup failed, phone model, app version) and sends it as `data.call_diag`. It is
+never sent on a call with talk time. Counts and flags only.
+
 ## SIM choice (Android)
 
 When the phone has more than one call-capable SIM, the Account screen lists them. The choice is

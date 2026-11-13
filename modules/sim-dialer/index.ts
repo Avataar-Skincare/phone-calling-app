@@ -49,6 +49,19 @@ export interface CallLogEntry {
   startedAt: number;
 }
 
+/**
+ * Why a call-log lookup found nothing (Android, ADR 0011). Counts and flags only: no numbers, no
+ * call-log contents.
+ */
+export interface CallLogLookupDebug {
+  /** READ_CALL_LOG is granted. */
+  permission: boolean;
+  /** Outgoing entries the app could see since the call was placed. */
+  outgoingSince: number;
+  /** One of them was to this number. */
+  matchedNumber: boolean;
+}
+
 /** A folder the agent granted read access to (Android Storage Access Framework tree). */
 export interface RecordingsFolder {
   /** content:// tree URI; the app stores it and re-checks it with getRecordingsFolder(). */
@@ -107,6 +120,9 @@ interface NativeSimDialer {
   listSims(): Promise<Sim[]>;
   placeCall(number: string, simId: string | null): Promise<PlaceCallResult>;
   lastCallFromLog(number: string, sinceMs: number): Promise<CallLogEntry | null>;
+  callLogVisibleCount(): Promise<number>;
+  defaultDialerPackage(): Promise<string | null>;
+  callLogLookupDebug(number: string, sinceMs: number): Promise<CallLogLookupDebug>;
   pickRecordingsFolder(): Promise<RecordingsFolder | null>;
   getRecordingsFolder(uri: string): Promise<RecordingsFolder | null>;
   listRecordings(treeUri: string, fromMs: number, toMs: number): Promise<RecordingFile[]>;
@@ -171,6 +187,34 @@ export async function placeCall(e164: string, simId?: string | null): Promise<Pl
  */
 export function getLastCallFromLog(e164: string, sinceMs: number): Promise<CallLogEntry | null> {
   return native && Platform.OS === "android" ? native.lastCallFromLog(e164, sinceMs) : Promise.resolve(null);
+}
+
+/**
+ * Android: how many call-log entries (any type, last 30 days) the app can see. -1 = unknown: not
+ * Android, no READ_CALL_LOG, an older build, or an error. 0 with the permission on means the phone
+ * hides the call log (ADR 0011). A count only.
+ */
+export function getCallLogVisibleCount(): Promise<number> {
+  if (!native || Platform.OS !== "android" || typeof native.callLogVisibleCount !== "function") {
+    return Promise.resolve(-1);
+  }
+  return native.callLogVisibleCount().catch(() => -1);
+}
+
+/** Android: package name of the phone's default dialer (e.g. "com.google.android.dialer"); null when unknown. */
+export function getDefaultDialerPackage(): Promise<string | null> {
+  if (!native || Platform.OS !== "android" || typeof native.defaultDialerPackage !== "function") {
+    return Promise.resolve(null);
+  }
+  return native.defaultDialerPackage().catch(() => null);
+}
+
+/** Android: why getLastCallFromLog found nothing. null when unavailable (iOS, no module, older build, error). */
+export function getCallLogLookupDebug(e164: string, sinceMs: number): Promise<CallLogLookupDebug | null> {
+  if (!native || Platform.OS !== "android" || typeof native.callLogLookupDebug !== "function") {
+    return Promise.resolve(null);
+  }
+  return native.callLogLookupDebug(e164, sinceMs).catch(() => null);
 }
 
 /** Android: open the system folder picker (read access only). null when cancelled or unavailable. */

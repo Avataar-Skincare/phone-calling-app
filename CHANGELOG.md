@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (2026-11-13, startup check and call diagnostics)
+
+- **"Before you start" check when the app opens (Android).** Looks at phone access and call logs
+  when the app opens and each time it comes back to the foreground. Missing access must be fixed
+  (no Skip). If access is on but the phone is hiding the call log (Xiaomi, Realme, Oppo), a warning
+  explains what to switch on, with **Open settings**, **Check again** and **Skip** (quiet for 24
+  hours). Recording tips never block: share steps on Google Phone only (the recordings folder stays in
+  Settings, not on this screen). Settings
+  has **Check my phone**. On Google Phone the recording screen now shows the share steps first. The
+  check at call time stays as the safety net
+  ([ADR 0011](docs/decisions/0011-startup-check-and-call-diag.md)).
+- **`call_diag` on calls with no talk time only.** Permission states, whether the phone shows a
+  call log, why the lookup failed, phone model and app version, sent as `data.call_diag` with the
+  call log (counts and flags only; never on a call with talk time). Shows which switch is off, as
+  in Bavadharani's case. No Compass change needed.
+- **Needs a new dev/store build: native.** New `SimDialerModule` functions `callLogVisibleCount`,
+  `defaultDialerPackage`, `callLogLookupDebug`. An older build still runs, with "unknown" values.
+
 - Share target accepts any file type: Google's Phone app shares call recordings (`record-<ms>.wav`)
   with a generic type, so the audio-only filter kept Compass Dialer out of its share sheet (Nothing
   CMF, 13 Nov). Non-audio files are turned away with "This file is not a supported audio file."

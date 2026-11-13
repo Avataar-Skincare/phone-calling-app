@@ -155,13 +155,15 @@ describe("calling a lead", () => {
     // The permission screen is Android-only (iOS needs no permission); Jest defaults to iOS.
     const os = jest.replaceProperty(Platform, "OS", "android");
     fakeCompass();
-    dialer.__setCapabilities({ canReadCallLog: false });
     (dialer.requestPermissions as jest.Mock).mockImplementationOnce(async () => {
       dialer.__setCapabilities({ canReadCallLog: true });
       return { status: "granted", granted: true, canAskAgain: true };
     });
     renderRouter("./src/app", { initialUrl: "/" });
     await screen.findByLabelText("Asha Rao, open lead");
+    // Turned off after the app opened (the open check is covered in startup-check.test.tsx), so the
+    // check at call time is the safety net under test here.
+    dialer.__setCapabilities({ canReadCallLog: false });
 
     fireEvent.press(screen.getByLabelText("Call Asha Rao"));
     expect(await screen.findByText("Allow calling from the app")).toBeTruthy();
@@ -177,9 +179,9 @@ describe("calling a lead", () => {
   it("doesn't call when the agent refuses call-log access (Android)", async () => {
     const os = jest.replaceProperty(Platform, "OS", "android");
     fakeCompass();
-    dialer.__setCapabilities({ canReadCallLog: false });
     renderRouter("./src/app", { initialUrl: "/" });
     await screen.findByLabelText("Asha Rao, open lead");
+    dialer.__setCapabilities({ canReadCallLog: false }); // turned off after the app opened
 
     fireEvent.press(screen.getByLabelText("Call Asha Rao"));
     fireEvent.press(await screen.findByText("Allow"));
@@ -195,9 +197,9 @@ describe("calling a lead", () => {
     // Call-through spy: records the app's AppState listeners without replacing the real ones.
     const appState = jest.spyOn(AppState, "addEventListener");
     fakeCompass();
-    dialer.__setCapabilities({ canReadCallLog: false });
     renderRouter("./src/app", { initialUrl: "/" });
     await screen.findByLabelText("Asha Rao, open lead");
+    dialer.__setCapabilities({ canReadCallLog: false }); // turned off after the app opened
 
     fireEvent.press(screen.getByLabelText("Call Asha Rao"));
     expect(await screen.findByText("Allow calling from the app")).toBeTruthy();
@@ -214,9 +216,9 @@ describe("calling a lead", () => {
     const os = jest.replaceProperty(Platform, "OS", "android");
     fakeCompass();
     useSettingsStore.setState({ permissionIntroSeen: true });
-    dialer.__setCapabilities({ canReadCallLog: false });
     renderRouter("./src/app", { initialUrl: "/" });
     await screen.findByLabelText("Asha Rao, open lead");
+    dialer.__setCapabilities({ canReadCallLog: false }); // turned off after the app opened
 
     fireEvent.press(screen.getByLabelText("Call Asha Rao"));
     expect(await screen.findByText("Allow calling from the app")).toBeTruthy();

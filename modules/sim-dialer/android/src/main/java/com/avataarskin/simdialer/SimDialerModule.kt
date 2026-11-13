@@ -109,6 +109,24 @@ class SimDialerModule : Module() {
       lastCallFromLog(number, sinceMs)
     }
 
+    /**
+     * How many call-log entries (any type) from the last 30 days this app can see; -1 when
+     * READ_CALL_LOG is missing or the phone refuses. 0 with the permission on usually means the phone
+     * maker hides the call log (ADR 0011). Only a count: nothing from the log leaves this function.
+     */
+    AsyncFunction("callLogVisibleCount") { callLogVisibleCount() }
+
+    /** Package name of the phone's default dialer, or null. */
+    AsyncFunction("defaultDialerPackage") { defaultDialerPackage() }
+
+    /**
+     * Why lastCallFromLog found nothing: {permission, outgoingSince, matchedNumber}. Counts and
+     * flags only, never numbers or log contents (ADR 0011).
+     */
+    AsyncFunction("callLogLookupDebug") { number: String, sinceMs: Double ->
+      callLogLookupDebug(number, sinceMs)
+    }
+
     /** Opens the system folder picker; resolves {uri, name} or null when cancelled. Read access only. */
     AsyncFunction("pickRecordingsFolder") { promise: Promise ->
       val activity = appContext.currentActivity
@@ -358,6 +376,58 @@ class SimDialerModule : Module() {
     }
   }
 
+  /** Entries of the last 30 days, any type; -1 without permission or when the query fails. */
+  private fun callLogVisibleCount(): Int {
+    if (!isGranted(Manifest.permission.READ_CALL_LOG)) return -1
+    val since = System.currentTimeMillis() - VISIBLE_WINDOW_MS
+    return try {
+      context.contentResolver.query(
+        CallLog.Calls.CONTENT_URI,
+        arrayOf(CallLog.Calls._ID),
+        "${CallLog.Calls.DATE} >= ?",
+        arrayOf(since.toString()),
+        null,
+      )?.use { c -> c.count } ?: -1
+    } catch (e: Exception) {
+      -1
+    }
+  }
+
+  private fun defaultDialerPackage(): String? =
+    try {
+      telecom.defaultDialerPackage
+    } catch (e: Exception) {
+      null
+    }
+
+  /** Same query as lastCallFromLog, but only counts: outgoing entries since `sinceMs`, and whether one matched. */
+  private fun callLogLookupDebug(number: String, sinceMs: Double): Map<String, Any> {
+    if (!isGranted(Manifest.permission.READ_CALL_LOG)) {
+      return mapOf("permission" to false, "outgoingSince" to 0, "matchedNumber" to false)
+    }
+    val want = number.filter { it.isDigit() }.takeLast(10)
+    var outgoing = 0
+    var matched = false
+    try {
+      context.contentResolver.query(
+        CallLog.Calls.CONTENT_URI,
+        arrayOf(CallLog.Calls.NUMBER),
+        "${CallLog.Calls.TYPE} = ? AND ${CallLog.Calls.DATE} >= ?",
+        arrayOf(CallLog.Calls.OUTGOING_TYPE.toString(), sinceMs.toLong().toString()),
+        null,
+      )?.use { c ->
+        while (c.moveToNext()) {
+          outgoing++
+          val n = (c.getString(0) ?: "").filter { it.isDigit() }.takeLast(10)
+          if (want.isNotEmpty() && n == want) matched = true
+        }
+      }
+    } catch (e: Exception) {
+      // Counted as nothing visible.
+    }
+    return mapOf("permission" to true, "outgoingSince" to outgoing, "matchedNumber" to matched)
+  }
+
   // ── Call recordings (read-only folder grant) ───────────────────────────────────────────────
 
   private fun folderName(treeUri: Uri): String {
@@ -597,6 +667,7 @@ class SimDialerModule : Module() {
   companion object {
     private const val MAX_SHARED_BYTES = 26_214_400L
     private const val SHARED_KEEP_MS = 3L * 24 * 60 * 60 * 1000
+    private const val VISIBLE_WINDOW_MS = 30L * 24 * 60 * 60 * 1000
     private const val PICK_FOLDER_REQUEST = 7311
     private const val MAX_RECORDINGS = 50
     private val AUDIO_EXTENSIONS = setOf("m4a", "aac", "mp3", "wav", "amr", "3gp", "3gpp", "ogg", "opus", "webm")

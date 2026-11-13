@@ -27,6 +27,12 @@ describe("sim-dialer without the native module", () => {
     await expect(SimDialer.getLastCallFromLog("+919876500001", 0)).resolves.toBeNull();
   });
 
+  it("has no startup-check or call-log diagnostics (safe fallbacks)", async () => {
+    await expect(SimDialer.getCallLogVisibleCount()).resolves.toBe(-1);
+    await expect(SimDialer.getDefaultDialerPackage()).resolves.toBeNull();
+    await expect(SimDialer.getCallLogLookupDebug("+919876500001", 0)).resolves.toBeNull();
+  });
+
   it("has no recordings support", async () => {
     await expect(SimDialer.pickRecordingsFolder()).resolves.toBeNull();
     await expect(SimDialer.getRecordingsFolder("content://x")).resolves.toBeNull();
@@ -51,5 +57,42 @@ describe("sim-dialer without the native module", () => {
   it("returns a no-op listener", () => {
     const sub = SimDialer.addCallStateListener(() => {});
     expect(() => sub.remove()).not.toThrow();
+  });
+});
+
+describe("sim-dialer on Android with a native module", () => {
+  /** Load index.ts fresh with a fake native module, as Android. */
+  function load(native: object) {
+    jest.resetModules();
+    jest.doMock("expo", () => ({ requireOptionalNativeModule: () => native }));
+    const { Platform } = require("react-native") as typeof import("react-native");
+    const os = jest.replaceProperty(Platform, "OS", "android");
+    const mod = require("./index") as typeof SimDialer;
+    return { mod, restore: () => os.restore() };
+  }
+
+  afterEach(() => jest.dontMock("expo"));
+
+  it("falls back when the build predates the diagnostics functions", async () => {
+    const { mod, restore } = load({ capabilities: async () => ({}) });
+    expect(mod.isNativeDialerAvailable).toBe(true);
+    await expect(mod.getCallLogVisibleCount()).resolves.toBe(-1);
+    await expect(mod.getDefaultDialerPackage()).resolves.toBeNull();
+    await expect(mod.getCallLogLookupDebug("+919876500001", 0)).resolves.toBeNull();
+    restore();
+  });
+
+  it("returns what the native module reports, and falls back when it throws", async () => {
+    const { mod, restore } = load({
+      callLogVisibleCount: jest.fn(async () => 0),
+      defaultDialerPackage: jest.fn(async () => "com.google.android.dialer"),
+      callLogLookupDebug: jest.fn(async () => {
+        throw new Error("boom");
+      }),
+    });
+    await expect(mod.getCallLogVisibleCount()).resolves.toBe(0);
+    await expect(mod.getDefaultDialerPackage()).resolves.toBe("com.google.android.dialer");
+    await expect(mod.getCallLogLookupDebug("+919876500001", 5)).resolves.toBeNull();
+    restore();
   });
 });

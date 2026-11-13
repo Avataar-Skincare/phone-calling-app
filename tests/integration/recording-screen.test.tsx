@@ -21,6 +21,7 @@ const dialer = SimDialer as typeof SimDialer & {
   __setCallLog: (e: { talkSeconds: number; startedAt: number } | null) => void;
   __setRecordingsFolder: (f: { uri: string; name: string } | null) => void;
   __setRecordings: (r: SimDialer.RecordingFile[]) => void;
+  __setDialerPackage: (p: string | null) => void;
 };
 
 const FOLDER = { uri: "content://tree/Call", name: "Call" };
@@ -77,6 +78,24 @@ describe("Upload call recording screen", () => {
     expect(server.find("POST", "/mobile-dialer/recordings/8001/upload-url")).toHaveLength(1);
     expect(server.find("POST", "/mobile-dialer/recordings/8001/complete")).toHaveLength(1);
     expect(useCallLog.getState().calls[0]?.recording?.status).toBe("uploaded");
+  });
+
+  it("on Google Phone shows the share steps first, and the folder as the second option (ADR 0011)", async () => {
+    dialer.__setRecordingsFolder(FOLDER);
+    dialer.__setDialerPackage("com.google.android.dialer");
+    fakeCompass();
+    await callAndHangUp(80);
+
+    expect(await screen.findByText("Share the recording to Compass Dialer.")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "To upload a recording, open Phone. Tap Recents. Open the call. Tap the recording. Tap Share. Choose Compass Dialer.",
+      ),
+    ).toBeTruthy();
+    expect(screen.queryByText("First, choose the folder where your phone saves call recordings.")).toBeNull();
+    // The folder is still there as the second option
+    fireEvent.press(screen.getByText("Choose folder"));
+    await waitFor(() => expect(dialer.pickRecordingsFolder).toHaveBeenCalled());
   });
 
   it("asks for the folder first, and uses the picker on this screen", async () => {

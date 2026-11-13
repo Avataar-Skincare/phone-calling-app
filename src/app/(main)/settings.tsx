@@ -156,6 +156,10 @@ function CallingSection({ perm, sims, reload }: ReturnType<typeof useCallingSett
         ) : null}
       </View>
 
+      {Platform.OS === "android" && SimDialer.isNativeDialerAvailable ? (
+        <Button title="Check my phone" kind="secondary" onPress={() => router.push("/setup-check")} />
+      ) : null}
+
       <RecordingsFolderCard />
 
       {sims.length > 1 ? (

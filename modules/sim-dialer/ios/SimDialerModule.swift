@@ -57,6 +57,19 @@ public class SimDialerModule: Module {
     }
 
     // Call recordings are Android only (folder grant + file upload); iOS has no equivalent.
+    // Android only (ADR 0011): neutral values here.
+    AsyncFunction("callLogVisibleCount") { () -> Int in
+      -1
+    }
+
+    AsyncFunction("defaultDialerPackage") { () -> String? in
+      nil
+    }
+
+    AsyncFunction("callLogLookupDebug") { (_: String, _: Double) -> [String: Any] in
+      ["permission": false, "outgoingSince": 0, "matchedNumber": false]
+    }
+
     AsyncFunction("pickRecordingsFolder") { () -> [String: String]? in
       nil
     }

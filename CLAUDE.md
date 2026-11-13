@@ -32,6 +32,8 @@ compile the module: see [docs/development.md](docs/development.md#checking-nativ
 - Android calling requires call-log access, checked before **every** call (`mustAskForCallLog`,
   [ADR 0008](docs/decisions/0008-call-log-access-required.md)); don't add a way to call without it.
   Each Android call log sends `call_log_permission` for Compass's Agent Audit.
+- App open runs the "Before you start" check (`src/lib/startupCheck.ts`, [ADR 0011](docs/decisions/0011-startup-check-and-call-diag.md));
+  `call_diag` goes out only on calls without talk time, counts and flags only. Keep both.
 - `/android` and `/ios` are generated; never edit them.
 - Times to Compass: fields Compass parses (`occurred_at`, filters) are ISO UTC (`toISOString()`).
   The readable call-log details (`call_*_at`) are IST "2026-11-06 18:21:50" (`toIstDateTime()`),

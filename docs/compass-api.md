@@ -122,6 +122,27 @@ Appointment, WhatsApp chat, Assign Owner, Edit Name, AI call analysis, in-app re
 }
 ```
 
+Android also sends `call_log_permission` (`"granted"` / `"denied"`, [ADR 0008](decisions/0008-call-log-access-required.md)).
+**Only when talk time could not be read**, it adds a nested `call_diag` object
+([ADR 0011](decisions/0011-startup-check-and-call-diag.md)); Compass keeps it in
+`activity_type_attributes` like any other `data` key. Calls with talk time never carry it:
+
+```json
+"call_diag": {
+  "phone": "granted | denied",
+  "phone_state": "granted | denied",
+  "call_log": "granted | denied",
+  "call_log_visible": "yes | no | unknown",
+  "lookup": "no_permission | not_found | number_mismatch | error",
+  "device": "Xiaomi Redmi Note 12 · Android 14",
+  "app": "1.0.0 (12)"
+}
+```
+
+`call_log_visible` is whether the phone showed any call-log entries from the last 30 days (`no` with
+`call_log: granted` means the phone maker hides the log). `lookup` is why this call's entry was not
+found. Counts and flags only: no numbers other than the lead's, no call-log contents.
+
 `occurred_at` is the call's end time. Compass uses it as the activity time when it is at most 2
 days old and not in the future, otherwise its own clock, so a call queued offline still shows at the
 time it happened (Compass `feat/activity-log-occurred-at`). **Compass must be deployed with that

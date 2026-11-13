@@ -1,4 +1,5 @@
 /// <reference types="jest" />
+import type { CallDiag } from "./callDiag";
 import { buildCallLogRequest, compassPhone, isRetryable, retryDelayMs, type CallForLog } from "./callLog";
 
 const T = Date.parse("2026-11-06T10:15:00.000Z");
@@ -99,6 +100,34 @@ describe("buildCallLogRequest", () => {
       "call_log_permission",
     );
     expect(buildCallLogRequest(call).data).not.toHaveProperty("call_log_permission");
+  });
+
+  describe("call_diag (ADR 0011)", () => {
+    const callDiag: CallDiag = {
+      phone: "granted",
+      phone_state: "granted",
+      call_log: "granted",
+      call_log_visible: "no",
+      lookup: "not_found",
+      device: "Xiaomi Redmi Note 12 · Android 14",
+      app: "1.0.0 (12)",
+    };
+
+    it("sends call_diag as a nested object on a call without talk time", () => {
+      const body = buildCallLogRequest({ ...call, talkTimeSeconds: null, ringTimeSeconds: null, callDiag });
+      expect(body.data.call_diag).toEqual(callDiag);
+    });
+
+    it("carries no call_diag on a call with talk time, even if one was stored", () => {
+      expect(buildCallLogRequest({ ...call, callDiag }).data).not.toHaveProperty("call_diag");
+      expect(buildCallLogRequest(call).data).not.toHaveProperty("call_diag");
+    });
+
+    it("omits call_diag when none was collected (iOS, older stored calls)", () => {
+      const noTalk = { ...call, talkTimeSeconds: null, ringTimeSeconds: null };
+      expect(buildCallLogRequest({ ...noTalk, callDiag: null }).data).not.toHaveProperty("call_diag");
+      expect(buildCallLogRequest(noTalk).data).not.toHaveProperty("call_diag");
+    });
   });
 });
 

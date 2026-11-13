@@ -8,6 +8,8 @@ import { Screen } from "@/components/Screen";
 import { RecordingPickerSheet } from "@/features/recordings/RecordingPickerSheet";
 import { SharedRecordingView } from "@/features/recordings/SharedRecordingView";
 import { useCallRecording } from "@/features/recordings/useCallRecording";
+import { FOLDER_TIP, GOOGLE_SHARE_STEPS } from "@/features/setup/texts";
+import { useIsGooglePhone } from "@/features/setup/useSetupCheck";
 import { formatFileSize } from "@/lib/format";
 import { recordingErrorMessage } from "@/lib/recordingMessages";
 import { formatTimeIST } from "@/lib/time";
@@ -58,6 +60,7 @@ function CallRecordingScreen({ callId }: { callId: string }) {
   const c = useColors();
   const r = useCallRecording(callId);
   const { call, phase } = r;
+  const googlePhone = useIsGooglePhone();
 
   useEffect(() => {
     if (phase !== "uploaded") return;
@@ -100,6 +103,20 @@ function CallRecordingScreen({ callId }: { callId: string }) {
         );
       }
       case "no_folder":
+        // Google Phone keeps recordings inside its own app, so a folder would stay empty: share first.
+        if (googlePhone) {
+          return (
+            <>
+              <AppText variant="heading">Share the recording to Compass Dialer.</AppText>
+              <AppText tone="muted">{GOOGLE_SHARE_STEPS}</AppText>
+              <AppText variant="label">Or choose a folder</AppText>
+              <AppText variant="small" tone="muted">
+                {FOLDER_TIP}
+              </AppText>
+              <Button title="Choose folder" kind="secondary" onPress={() => void r.chooseFolder()} />
+            </>
+          );
+        }
         return (
           <>
             <AppText variant="heading">

@@ -7,6 +7,7 @@
  */
 import type {
   CallLogEntry,
+  CallLogLookupDebug,
   CallStateEvent,
   DialerCapabilities,
   NativeCallState,
@@ -33,6 +34,11 @@ let capabilities: DialerCapabilities = { ...ANDROID };
 let callLog: CallLogEntry | null = null;
 let permissions: PermissionResponse = { status: "granted", granted: true, canAskAgain: true };
 let callState: NativeCallState | "unknown" = "idle";
+/** Entries the phone shows in the last 30 days (-1 = unknown). A healthy phone has some. */
+let visibleCount = 12;
+let dialerPackage: string | null = null;
+/** Overrides what callLogLookupDebug reports; null = derived from the capabilities. */
+let lookupDebug: CallLogLookupDebug | null = null;
 let sims: Sim[] = [{ id: "sim-1", label: "Jio" }];
 
 /** The folder the picker returns and getRecordingsFolder() recognises; null = none / access lost. */
@@ -52,6 +58,12 @@ export const placeCall = jest.fn(async (_e164: string, _simId?: string | null): 
   capabilities.canDirectDial ? "direct" : "dialer",
 );
 export const getLastCallFromLog = jest.fn(async (_e164: string, _sinceMs: number) => callLog);
+export const getCallLogVisibleCount = jest.fn(async () => (capabilities.canReadCallLog ? visibleCount : -1));
+export const getDefaultDialerPackage = jest.fn(async () => dialerPackage);
+export const getCallLogLookupDebug = jest.fn(
+  async (_e164: string, _sinceMs: number): Promise<CallLogLookupDebug | null> =>
+    lookupDebug ?? { permission: capabilities.canReadCallLog, outgoingSince: 0, matchedNumber: false },
+);
 export const pickRecordingsFolder = jest.fn(async () => recordingsFolder);
 export const getRecordingsFolder = jest.fn(async (uri: string) =>
   recordingsFolder && recordingsFolder.uri === uri ? recordingsFolder : null,
@@ -108,6 +120,21 @@ export function __setCallLog(entry: CallLogEntry | null) {
   callLog = entry;
 }
 
+/** Call-log entries the phone shows (0 = hidden by the phone maker, -1 = unknown). */
+export function __setCallLogVisible(n: number) {
+  visibleCount = n;
+}
+
+/** The phone's default dialer package, e.g. "com.google.android.dialer". */
+export function __setDialerPackage(p: string | null) {
+  dialerPackage = p;
+}
+
+/** What callLogLookupDebug reports; null = derived (permission from capabilities, nothing seen). */
+export function __setLookupDebug(d: CallLogLookupDebug | null) {
+  lookupDebug = d;
+}
+
 export function __setSims(s: Sim[]) {
   sims = s;
 }
@@ -134,6 +161,9 @@ export function __reset() {
   permissions = { status: "granted", granted: true, canAskAgain: true };
   callState = "idle";
   sims = [{ id: "sim-1", label: "Jio" }];
+  visibleCount = 12;
+  dialerPackage = null;
+  lookupDebug = null;
   recordingsFolder = null;
   recordings = [];
   uploadStatus = 200;
@@ -148,6 +178,9 @@ export function __reset() {
     listSims,
     placeCall,
     getLastCallFromLog,
+    getCallLogVisibleCount,
+    getDefaultDialerPackage,
+    getCallLogLookupDebug,
     pickRecordingsFolder,
     getRecordingsFolder,
     listRecordings,

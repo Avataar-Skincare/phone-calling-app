@@ -15,5 +15,6 @@ they're accepted; a later record supersedes an earlier one and says so.
 | 0008 | [Call-log access is required to call from the app on Android](0008-call-log-access-required.md)                                 | 2026-11-12 | Accepted           |
 | 0009 | [Keypad dialing claims the lead before it dials](0009-keypad-claim.md)                                                          | 2026-11-13 | Accepted           |
 | 0010 | [Share a call recording to the app (Android, Google Phone)](0010-share-recording-to-app.md)                                     | 2026-11-13 | Accepted           |
+| 0011 | [Startup check ("Before you start") and call_diag on calls without talk time](0011-startup-check-and-call-diag.md)              | 2026-11-13 | Accepted           |
 
 New record: copy the format of an existing one, use the next number, add it to this table.

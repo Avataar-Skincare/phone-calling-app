@@ -18,6 +18,10 @@ const dialer = SimDialer as typeof SimDialer & {
   __reset: () => void;
   __setCapabilities: (c: object) => void;
   __setCallLog: (e: { talkSeconds: number; startedAt: number } | null) => void;
+  __setCallLogVisible: (n: number) => void;
+  __setLookupDebug: (
+    d: { permission: boolean; outgoingSince: number; matchedNumber: boolean } | null,
+  ) => void;
 };
 
 const target = {
@@ -193,6 +197,75 @@ describe("finishCall", () => {
     expect(useCallLog.getState().calls[0]).toMatchObject({
       callLogPermission: "denied",
       talkTimeSeconds: null,
+    });
+  });
+
+  describe("call_diag (ADR 0011)", () => {
+    async function finishWithoutLogEntry(endS = 30) {
+      jest.useFakeTimers();
+      try {
+        const done = finishCall(ended("android", endS));
+        await jest.advanceTimersByTimeAsync(10_000);
+        await done;
+      } finally {
+        jest.useRealTimers();
+      }
+    }
+
+    it("is kept when talk time is missing: the phone shows no call log", async () => {
+      dialer.__setCallLogVisible(0);
+      await finishWithoutLogEntry();
+      expect(dialer.getCallLogLookupDebug).toHaveBeenCalledWith("+919876500001", T - 5_000);
+      expect(useCallLog.getState().calls[0]).toMatchObject({
+        talkTimeSeconds: null,
+        callDiag: {
+          phone: "granted",
+          phone_state: "granted",
+          call_log: "granted",
+          call_log_visible: "no",
+          lookup: "not_found",
+        },
+      });
+      expect(useCallLog.getState().calls[0]?.callDiag?.device).toMatch(/Android|Unknown phone/);
+    });
+
+    it("says why: outgoing calls seen but none to this number", async () => {
+      dialer.__setLookupDebug({ permission: true, outgoingSince: 2, matchedNumber: false });
+      await finishWithoutLogEntry();
+      expect(useCallLog.getState().calls[0]?.callDiag).toMatchObject({
+        call_log_visible: "yes",
+        lookup: "number_mismatch",
+      });
+    });
+
+    it("says why: access revoked", async () => {
+      dialer.__setCapabilities({ canReadCallLog: false });
+      await finishWithoutLogEntry();
+      expect(useCallLog.getState().calls[0]?.callDiag).toMatchObject({
+        call_log: "denied",
+        call_log_visible: "unknown",
+        lookup: "no_permission",
+      });
+    });
+
+    it("falls back to error when the phone cannot explain", async () => {
+      (dialer.getCallLogLookupDebug as jest.Mock).mockResolvedValue(null);
+      await finishWithoutLogEntry();
+      expect(useCallLog.getState().calls[0]?.callDiag).toMatchObject({ lookup: "error" });
+    });
+
+    it("is not collected when talk time was read (not even a 0 s answer)", async () => {
+      dialer.__setCallLog({ talkSeconds: 0, startedAt: T + 500 });
+      await finishCall(ended("android", 35));
+      expect(dialer.getCallLogLookupDebug).not.toHaveBeenCalled();
+      expect(dialer.getCallLogVisibleCount).not.toHaveBeenCalled();
+      expect(useCallLog.getState().calls[0]?.callDiag).toBeNull();
+    });
+
+    it("is not collected on iOS", async () => {
+      await finishCall(ended("ios", 200, 9));
+      expect(dialer.getCallLogLookupDebug).not.toHaveBeenCalled();
+      expect(useCallLog.getState().calls[0]?.callDiag).toBeNull();
     });
   });
 
