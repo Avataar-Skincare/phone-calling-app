@@ -128,7 +128,21 @@ with the phone's own dialer and the app uploads that file.
 - `uploadRecording(callId, file)` (`src/features/recordings/uploadRecording.ts`) needs the call's
   `activityId`; runs upload-url → native PUT → complete (see [compass-api.md](compass-api.md#call-recording-upload));
   stores the result in `FinishedCall.recording`; ignores a second tap while uploading.
-- Native: `pickRecordingsFolder`, `getRecordingsFolder`, `listRecordings`, `uploadRecording` in
+- **Share from Google Phone** ([ADR 0010](decisions/0010-share-recording-to-app.md)): where the
+  dialer keeps recordings inside its own app (Nothing/CMF, Pixel, Motorola) there is no folder. The
+  agent opens Phone → Recents → the call → the recording → Share → **Compass Dialer**. The app is an
+  `audio/*` share target; `SimDialerModule` copies the file to `cacheDir/shared-recordings` at once
+  (25 MB cap, files older than 3 days cleaned up) and hands it to JS by `takeSharedRecording()`
+  (cold start, app to front) or the `sharedRecording` event (app running). `SharedRecordingWatcher`
+  (main layout) opens `/recording?shared=1`, which shows "This recording is for: Call to {name}" +
+  **Upload** + **Choose another call**, or "Which call is this recording for?" with the agent's
+  calls from the last 2 days. Matching (`src/lib/sharedRecordingMatch.ts`): the time in the file name
+  (`record-<epoch ms>.wav` = recording start; `yyyyMMdd_HHmmss` / `yyyy-MM-dd HH-mm-ss` read as IST)
+  against each call's tap − 60 s … end + 60 s; with no time, the newest call that ended in the last 30
+  minutes. Upload is the same `uploadRecording(callId, file)`. A file shared while signed out waits
+  until sign-in. Needs a new native build.
+- Native: `pickRecordingsFolder`, `getRecordingsFolder`, `listRecordings`, `uploadRecording`,
+  `takeSharedRecording` (+ event `sharedRecording`) in
   `modules/sim-dialer`. iOS returns null / [] and rejects the upload ("Recording upload is Android
   only"); the UI is hidden there.
 

@@ -6,6 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (2026-11-13, share a recording to the app)
+
+- **Upload a call recording by sharing it to Compass Dialer (Android).** For phones whose dialer is
+  Google's Phone app (Nothing/CMF, Pixel, Motorola), which keeps recordings inside the app: open
+  the call in Recents → the recording → Share → Compass Dialer. The app copies the file, works out
+  which call it is for from the time in the file name (`record-<epoch ms>.wav`) and asks the agent to
+  confirm, or to choose the call, then uploads it like any other recording
+  ([ADR 0010](docs/decisions/0010-share-recording-to-app.md)). **Needs a new dev/store build:
+  native** (share-target intent filter and `SimDialerModule` changes).
+
 ### Added (2026-11-13, recording screen)
 
 - **Upload call recording screen opens by itself.** After an answered Android call, a full screen

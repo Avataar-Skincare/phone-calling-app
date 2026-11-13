@@ -64,6 +64,14 @@ works on the website and in the Calls tab. Code: `src/features/recordings/`,
 `src/lib/recordingMatch.ts`, `src/api/recordings.ts`, `modules/sim-dialer` (4 functions). This is the
 app's second write to Compass (ADR 0007 supersedes the "only write" line in 0005/0006).
 
+**Google Phone (Nothing/CMF, Pixel, Motorola) keeps recordings inside the Phone app, so there is no
+folder to pick ([ADR 0010](docs/decisions/0010-share-recording-to-app.md)).** The agent opens
+Phone → Recents → the call → the recording → **Share** → **Compass Dialer**. The app is an `audio/*`
+share target (`app.json` intent filter), copies the file to its cache at once (`takeSharedRecording`,
+event `sharedRecording`), matches it to a call from the time in the name (`record-<epoch ms>.wav`,
+`src/lib/sharedRecordingMatch.ts`), and uploads it with the same `uploadRecording`. Watcher:
+`SharedRecordingWatcher`; screen: `/recording?shared=1`. Needs a new native build.
+
 **Compass side (Mithilesh, `leadsquared-avataar-server`), done and live:** the upload-url and complete
 endpoints, S3 storage, and the play endpoint redirecting to the stored file. Not built here.
 

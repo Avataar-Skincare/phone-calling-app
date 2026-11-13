@@ -69,6 +69,24 @@ export interface RecordingFile {
   mimeType: string;
 }
 
+/**
+ * A recording another app shared to this one (Android: Share → Compass Dialer, ADR 0010). The native
+ * side has already copied it into the app's cache, so `uri` is a file:// the app owns.
+ */
+export interface SharedRecording {
+  /** file:// in the app cache; "" when `error` is set. */
+  uri: string;
+  /** The sender's file name, e.g. "record-1794566075519.wav". */
+  name: string;
+  sizeBytes: number;
+  /** "" when the sender gave none (use the file extension). */
+  mimeType: string;
+  /** epoch ms: when the file arrived */
+  sharedAt: number;
+  /** Set when the file could not be copied: over 25 MB, or not readable. */
+  error?: "too_big" | "unreadable";
+}
+
 export interface Sim {
   id: string;
   label: string;
@@ -79,6 +97,8 @@ export type PlaceCallResult = "direct" | "dialer";
 
 interface NativeSimDialer {
   addListener(event: "callState", listener: (e: CallStateEvent) => void): { remove: () => void };
+  addListener(event: "sharedRecording", listener: (e: SharedRecording) => void): { remove: () => void };
+  takeSharedRecording(): Promise<SharedRecording | null>;
   getPermissions(): Promise<PermissionResponse>;
   requestPermissions(): Promise<PermissionResponse>;
   capabilities(): Promise<DialerCapabilities>;
@@ -187,6 +207,24 @@ export function uploadRecording(
   if (native && Platform.OS === "android")
     return native.uploadRecording(fileUri, url, contentType, sizeBytes);
   return Promise.reject(new Error("Recording upload is Android only"));
+}
+
+/**
+ * Android: the recording shared to the app that hasn't been taken yet (also one that started the app),
+ * then null. null on iOS, without the native module, or in a build made before sharing existed.
+ */
+export function takeSharedRecording(): Promise<SharedRecording | null> {
+  if (!native || Platform.OS !== "android") return Promise.resolve(null);
+  // An older Android build has the module but not this function.
+  return typeof native.takeSharedRecording === "function"
+    ? native.takeSharedRecording().catch(() => null)
+    : Promise.resolve(null);
+}
+
+/** A recording is shared to the app while it is running. No-op when unavailable. */
+export function addSharedRecordingListener(listener: (e: SharedRecording) => void): { remove: () => void } {
+  if (!native || Platform.OS !== "android") return { remove: () => {} };
+  return native.addListener("sharedRecording", listener);
 }
 
 export function addCallStateListener(listener: (e: CallStateEvent) => void): { remove: () => void } {

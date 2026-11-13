@@ -36,6 +36,8 @@ export function recordingErrorMessage(error: string | null | undefined): string 
     return "This recording is too big. The limit is 25 MB.";
   }
   if (text.includes("empty")) return "This recording is empty.";
+  // A shared file the app could not copy (ADR 0010)
+  if (text.includes("could not read")) return "Could not open this file. Share it again.";
   if (
     text.includes("supported audio") ||
     text.includes("content type") ||

@@ -6,10 +6,12 @@ import { AppText } from "@/components/AppText";
 import { Button } from "@/components/Button";
 import { Screen } from "@/components/Screen";
 import { RecordingPickerSheet } from "@/features/recordings/RecordingPickerSheet";
+import { SharedRecordingView } from "@/features/recordings/SharedRecordingView";
 import { useCallRecording } from "@/features/recordings/useCallRecording";
 import { formatFileSize } from "@/lib/format";
 import { recordingErrorMessage } from "@/lib/recordingMessages";
 import { formatTimeIST } from "@/lib/time";
+import { useSharedRecording } from "@/store/sharedRecording.store";
 import { SPACE, useColors } from "@/theme/tokens";
 
 const CLOSE_AFTER_UPLOAD_MS = 2_000;
@@ -20,14 +22,41 @@ function close() {
 }
 
 /**
- * Upload call recording (ADR 0007). Opens by itself after an answered Android call
- * (`RecordingPrompt`). Walks the agent through: choose folder, find the file, upload.
+ * Upload call recording (ADR 0007, 0010). Two ways in:
+ *  - after an answered Android call (`RecordingPrompt`, `callId`): choose folder, find the file, upload;
+ *  - a recording shared from the phone's Phone app (`SharedRecordingWatcher`, `shared=1`): match it to
+ *    a call, upload.
  * Skip closes it; the summary card row stays as the fallback.
  */
 export default function RecordingScreen() {
+  const { callId, shared } = useLocalSearchParams<{ callId?: string; shared?: string }>();
+  if (shared === "1") return <SharedRecordingScreen />;
+  return <CallRecordingScreen callId={String(callId ?? "")} />;
+}
+
+function SharedRecordingScreen() {
+  const file = useSharedRecording((s) => s.file);
+  const clear = useSharedRecording((s) => s.clear);
+  // Leaving the screen any way (Done, Skip, swipe down) forgets the file.
+  useEffect(() => clear, [clear]);
+  const done = () => {
+    clear();
+    close();
+  };
+
+  return (
+    <Screen scroll>
+      <AppText variant="title" style={{ fontSize: 30 }}>
+        Upload call recording
+      </AppText>
+      {file ? <SharedRecordingView key={`${file.uri}-${file.sharedAt}`} file={file} onClose={done} /> : null}
+    </Screen>
+  );
+}
+
+function CallRecordingScreen({ callId }: { callId: string }) {
   const c = useColors();
-  const { callId } = useLocalSearchParams<{ callId: string }>();
-  const r = useCallRecording(String(callId ?? ""));
+  const r = useCallRecording(callId);
   const { call, phase } = r;
 
   useEffect(() => {
@@ -79,6 +108,9 @@ export default function RecordingScreen() {
             <Button title="Choose folder" onPress={() => void r.chooseFolder()} />
             <AppText variant="small" tone="muted">
               Samsung: Recordings › Call. Xiaomi: MIUI › sound_recorder › call_rec.
+            </AppText>
+            <AppText variant="small" tone="muted">
+              Google Phone: open the call in Recents, tap the recording, tap Share, choose Compass Dialer.
             </AppText>
           </>
         );

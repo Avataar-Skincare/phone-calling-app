@@ -14,6 +14,7 @@ import type {
   PlaceCallResult,
   RecordingFile,
   RecordingsFolder,
+  SharedRecording,
   Sim,
 } from "../index";
 
@@ -68,6 +69,25 @@ export const addCallStateListener = jest.fn((l: Listener) => {
   return { remove: () => listeners.delete(l) };
 });
 
+/** Files shared to the app and not yet taken (cold start, or shared while no listener was up). */
+let sharedQueue: SharedRecording[] = [];
+const sharedListeners = new Set<(e: SharedRecording) => void>();
+export const takeSharedRecording = jest.fn(async () => sharedQueue.shift() ?? null);
+export const addSharedRecordingListener = jest.fn((l: (e: SharedRecording) => void) => {
+  sharedListeners.add(l);
+  return { remove: () => sharedListeners.delete(l) };
+});
+
+/**
+ * Share a recording to the app. Like the native side it is queued for takeSharedRecording() AND
+ * emitted to listeners; the app takes it once (the queue is what a cold start reads).
+ * `emit: false` simulates a cold start: only takeSharedRecording() sees it.
+ */
+export function __shareRecording(file: SharedRecording, opts: { emit?: boolean } = {}) {
+  sharedQueue.push(file);
+  if (opts.emit !== false) sharedListeners.forEach((l) => l(file));
+}
+
 /** Deliver a call-state event to the app, as the native module would. */
 export function __emit(e: CallStateEvent) {
   if (e.state === "offhook" || e.state === "dialing" || e.state === "connected") callState = "offhook";
@@ -117,6 +137,8 @@ export function __reset() {
   recordingsFolder = null;
   recordings = [];
   uploadStatus = 200;
+  sharedQueue = [];
+  sharedListeners.clear();
   [
     getPermissions,
     requestPermissions,
@@ -130,5 +152,7 @@ export function __reset() {
     getRecordingsFolder,
     listRecordings,
     uploadRecording,
+    takeSharedRecording,
+    addSharedRecordingListener,
   ].forEach((f) => f.mockClear());
 }

@@ -28,6 +28,7 @@ describe("recordingErrorMessage", () => {
     ],
     ["The file hasn't reached Compass yet. Upload it again.", "Upload did not finish. Try again."],
     ["Call not found", "This call is not in Compass yet. Try again later."],
+    ["Could not read the shared file", "Could not open this file. Share it again."],
     ["Something odd", "Could not upload. Try again."],
     [null, "Upload did not finish. Try again."],
   ])("%s", (input, expected) => {

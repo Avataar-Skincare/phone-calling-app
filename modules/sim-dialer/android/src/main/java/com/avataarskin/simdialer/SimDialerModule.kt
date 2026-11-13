@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.CallLog
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.telephony.PhoneStateListener
@@ -26,6 +27,7 @@ import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -64,7 +66,7 @@ class SimDialerModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("SimDialer")
 
-    Events("callState")
+    Events("callState", "sharedRecording")
 
     OnCreate { startTracking() }
 
@@ -157,6 +159,29 @@ class SimDialerModule : Module() {
     /** Audio files in the folder (and one level of sub-folders) modified in [fromMs, toMs], newest first, max 50. */
     AsyncFunction("listRecordings") { treeUri: String, fromMs: Double, toMs: Double ->
       listRecordings(Uri.parse(treeUri), fromMs.toLong(), toMs.toLong())
+    }
+
+    /**
+     * A recording shared to this app from another app (Share → Compass Dialer; ADR 0010). Copied to
+     * the cache the moment it arrives, because the sender's read grant ends with the activity.
+     * Resolves the pending file once, then null. Also picks up a share that started the app (cold start).
+     */
+    AsyncFunction("takeSharedRecording") {
+      appContext.currentActivity?.intent?.let { receiveShared(it) }?.let { setPendingShared(it) }
+      takePendingShared()
+    }.runOnQueue(Queues.DEFAULT)
+
+    /** The app was already running when the file was shared. Copy off the main thread, then tell JS. */
+    OnNewIntent { intent ->
+      val uri = takeShareUri(intent)
+      if (uri != null) {
+        val type = intent.type
+        Thread {
+          val shared = copyShared(uri, type)
+          setPendingShared(shared)
+          sendEvent("sharedRecording", shared)
+        }.start()
+      }
     }
 
     /** PUT the file's bytes to `url`; returns {status}. Non-2xx statuses are returned, IO failures throw. */
@@ -445,7 +470,127 @@ class SimDialerModule : Module() {
     }
   }
 
+  // ── Recordings shared from another app (Share → Compass Dialer) ───────────────────────────
+
+  private val sharedLock = Any()
+  private var pendingShared: Map<String, Any>? = null
+
+  private fun setPendingShared(shared: Map<String, Any>?) {
+    if (shared != null) synchronized(sharedLock) { pendingShared = shared }
+  }
+
+  private fun takePendingShared(): Map<String, Any>? =
+    synchronized(sharedLock) {
+      val s = pendingShared
+      pendingShared = null
+      s
+    }
+
+  /**
+   * The audio Uri of an ACTION_SEND intent, and marks the intent used (stream removed, neutral
+   * action) so it is never handled twice. null for anything else; such intents are left alone.
+   */
+  @Suppress("DEPRECATION")
+  private fun takeShareUri(intent: Intent): Uri? {
+    if (intent.action != Intent.ACTION_SEND) return null
+    if (intent.type?.startsWith("audio/") != true) return null
+    val uri: Uri? =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+      } else {
+        intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+      }
+    if (uri == null) return null
+    intent.removeExtra(Intent.EXTRA_STREAM)
+    intent.action = Intent.ACTION_MAIN
+    return uri
+  }
+
+  /** Synchronous variant for the cold-start path: copy the intent's shared file, if there is one. */
+  private fun receiveShared(intent: Intent): Map<String, Any>? {
+    val type = intent.type
+    val uri = takeShareUri(intent) ?: return null
+    return copyShared(uri, type)
+  }
+
+  /**
+   * Copies the shared file into `cacheDir/shared-recordings` (streamed, 25 MB cap) and describes it:
+   * {uri: file://…, name, sizeBytes, mimeType, sharedAt}. When it can't be used the map carries
+   * `error` instead: "too_big" or "unreadable" (and uri is ""). Cached copies older than 3 days
+   * are deleted first.
+   */
+  private fun copyShared(source: Uri, intentType: String?): Map<String, Any> {
+    val now = System.currentTimeMillis()
+    val dir = File(context.cacheDir, "shared-recordings").also { it.mkdirs() }
+    dir.listFiles()?.forEach { if (now - it.lastModified() > SHARED_KEEP_MS) it.delete() }
+
+    var name = "recording"
+    var declared = -1L
+    try {
+      context.contentResolver.query(
+        source,
+        arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+        null, null, null,
+      )?.use { c ->
+        if (c.moveToFirst()) {
+          c.getString(0)?.takeIf { it.isNotBlank() }?.let { name = it }
+          if (!c.isNull(1)) declared = c.getLong(1)
+        }
+      }
+    } catch (e: Exception) {
+      // The name and size are nice to have; the bytes decide.
+    }
+    val resolved = try { context.contentResolver.getType(source) } catch (e: Exception) { null }
+    val mime = listOf(resolved, intentType).firstOrNull { it != null && it.startsWith("audio/") && !it.endsWith("/*") } ?: ""
+
+    fun result(uri: String, size: Long, error: String? = null): Map<String, Any> {
+      val m = mutableMapOf<String, Any>(
+        "uri" to uri,
+        "name" to name,
+        "sizeBytes" to size.toDouble(),
+        "mimeType" to mime,
+        "sharedAt" to now.toDouble(),
+      )
+      if (error != null) m["error"] = error
+      return m
+    }
+
+    if (declared > MAX_SHARED_BYTES) return result("", declared, "too_big")
+
+    val safe = name.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(80)
+    val target = File(dir, "$now-$safe")
+    try {
+      val input = context.contentResolver.openInputStream(source) ?: return result("", 0, "unreadable")
+      var total = 0L
+      input.use { ins ->
+        target.outputStream().use { os ->
+          val buf = ByteArray(64 * 1024)
+          while (true) {
+            val n = ins.read(buf)
+            if (n < 0) break
+            total += n
+            if (total > MAX_SHARED_BYTES) break
+            os.write(buf, 0, n)
+          }
+        }
+      }
+      if (total > MAX_SHARED_BYTES) {
+        target.delete()
+        return result("", total, "too_big")
+      }
+      return result(Uri.fromFile(target).toString(), total)
+    } catch (e: IOException) {
+      target.delete()
+      return result("", 0, "unreadable")
+    } catch (e: SecurityException) {
+      target.delete()
+      return result("", 0, "unreadable")
+    }
+  }
+
   companion object {
+    private const val MAX_SHARED_BYTES = 26_214_400L
+    private const val SHARED_KEEP_MS = 3L * 24 * 60 * 60 * 1000
     private const val PICK_FOLDER_REQUEST = 7311
     private const val MAX_RECORDINGS = 50
     private val AUDIO_EXTENSIONS = setOf("m4a", "aac", "mp3", "wav", "amr", "3gp", "3gpp", "ogg", "opus", "webm")
