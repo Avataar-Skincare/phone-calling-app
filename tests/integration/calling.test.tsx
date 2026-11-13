@@ -4,7 +4,7 @@
  * Integration: tap Call → phone call events → banner while on the call → call summary (talk,
  * ringing, total) after it ends, kept on the phone; and the WhatsApp button. Renders the real app with a fake Compass and the sim-dialer test double.
  */
-import { Alert, Linking, Platform } from "react-native";
+import { Alert, AppState, Linking, Platform } from "react-native";
 import { act, fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { renderRouter } from "expo-router/testing-library";
 
@@ -151,8 +151,80 @@ describe("calling a lead", () => {
     expect(screen.queryByText("How did the call go?")).toBeNull();
   });
 
-  it("asks for the phone permissions once before the first call (Android)", async () => {
-    // The explainer is Android-only (iOS needs no permission); Jest defaults to iOS.
+  it("blocks an Android call until call-log access is granted, then places it (ADR 0008)", async () => {
+    // The permission screen is Android-only (iOS needs no permission); Jest defaults to iOS.
+    const os = jest.replaceProperty(Platform, "OS", "android");
+    fakeCompass();
+    dialer.__setCapabilities({ canReadCallLog: false });
+    (dialer.requestPermissions as jest.Mock).mockImplementationOnce(async () => {
+      dialer.__setCapabilities({ canReadCallLog: true });
+      return { status: "granted", granted: true, canAskAgain: true };
+    });
+    renderRouter("./src/app", { initialUrl: "/" });
+    await screen.findByLabelText("Asha Rao, open lead");
+
+    fireEvent.press(screen.getByLabelText("Call Asha Rao"));
+    expect(await screen.findByText("Allow calling from the app")).toBeTruthy();
+    expect(screen.queryByText("Not now, use the dialer")).toBeNull();
+    expect(dialer.placeCall).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByText("Allow"));
+    await waitFor(() => expect(dialer.requestPermissions).toHaveBeenCalled());
+    await waitFor(() => expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null));
+    os.restore();
+  });
+
+  it("doesn't call when the agent refuses call-log access (Android)", async () => {
+    const os = jest.replaceProperty(Platform, "OS", "android");
+    fakeCompass();
+    dialer.__setCapabilities({ canReadCallLog: false });
+    renderRouter("./src/app", { initialUrl: "/" });
+    await screen.findByLabelText("Asha Rao, open lead");
+
+    fireEvent.press(screen.getByLabelText("Call Asha Rao"));
+    fireEvent.press(await screen.findByText("Allow"));
+    expect(await screen.findByText(/Call logs weren't allowed, so the call can't be made/)).toBeTruthy();
+    // Android may refuse the prompt silently from now on, so Settings is offered right away.
+    expect(screen.getByText("Open Settings")).toBeTruthy();
+    expect(dialer.placeCall).not.toHaveBeenCalled();
+    os.restore();
+  });
+
+  it("places the call when the agent comes back from Settings with call logs on (Android)", async () => {
+    const os = jest.replaceProperty(Platform, "OS", "android");
+    // Call-through spy: records the app's AppState listeners without replacing the real ones.
+    const appState = jest.spyOn(AppState, "addEventListener");
+    fakeCompass();
+    dialer.__setCapabilities({ canReadCallLog: false });
+    renderRouter("./src/app", { initialUrl: "/" });
+    await screen.findByLabelText("Asha Rao, open lead");
+
+    fireEvent.press(screen.getByLabelText("Call Asha Rao"));
+    expect(await screen.findByText("Allow calling from the app")).toBeTruthy();
+
+    dialer.__setCapabilities({ canReadCallLog: true }); // turned on in Settings
+    // The permissions screen mounted last, so its listener is the newest one.
+    const onChange = appState.mock.calls.at(-1)?.[1] as (s: string) => void;
+    await act(async () => onChange("active"));
+    await waitFor(() => expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null));
+    os.restore();
+  });
+
+  it("asks again on every call while access is off, even after the first time (Android)", async () => {
+    const os = jest.replaceProperty(Platform, "OS", "android");
+    fakeCompass();
+    useSettingsStore.setState({ permissionIntroSeen: true });
+    dialer.__setCapabilities({ canReadCallLog: false });
+    renderRouter("./src/app", { initialUrl: "/" });
+    await screen.findByLabelText("Asha Rao, open lead");
+
+    fireEvent.press(screen.getByLabelText("Call Asha Rao"));
+    expect(await screen.findByText("Allow calling from the app")).toBeTruthy();
+    expect(dialer.placeCall).not.toHaveBeenCalled();
+    os.restore();
+  });
+
+  it("calls straight away on Android when call-log access is already granted", async () => {
     const os = jest.replaceProperty(Platform, "OS", "android");
     fakeCompass();
     useSettingsStore.setState({ permissionIntroSeen: false });
@@ -160,13 +232,8 @@ describe("calling a lead", () => {
     await screen.findByLabelText("Asha Rao, open lead");
 
     fireEvent.press(screen.getByLabelText("Call Asha Rao"));
-    expect(await screen.findByText("Allow calling from the app")).toBeTruthy();
-    expect(dialer.placeCall).not.toHaveBeenCalled();
-
-    fireEvent.press(screen.getByText("Allow"));
-    await waitFor(() => expect(dialer.requestPermissions).toHaveBeenCalled());
     await waitFor(() => expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null));
-    expect(useSettingsStore.getState().permissionIntroSeen).toBe(true);
+    expect(screen.queryByText("Allow calling from the app")).toBeNull();
     os.restore();
   });
 

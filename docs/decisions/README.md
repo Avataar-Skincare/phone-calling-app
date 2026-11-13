@@ -11,5 +11,7 @@ they're accepted; a later record supersedes an earlier one and says so.
 | 0004 | [Frontend-only repo; Compass stays the only backend](0004-frontend-only-repo.md)                                                | 2026-11-05 | Accepted           |
 | 0005 | [Log each call as "Manual Outbound Call"; outcomes stay on the web](0005-log-calls-as-manual-outbound-call.md)                  | 2026-11-06 | Accepted           |
 | 0006 | [Talk, ringing and total time; WhatsApp button; no outcomes, stage or task changes in the app](0006-call-times-and-whatsapp.md) | 2026-11-06 | Accepted           |
+| 0007 | Reserved: call recording upload (not written yet)                                                                               | —          | Reserved           |
+| 0008 | [Call-log access is required to call from the app on Android](0008-call-log-access-required.md)                                 | 2026-11-12 | Accepted           |
 
 New record: copy the format of an existing one, use the next number, add it to this table.

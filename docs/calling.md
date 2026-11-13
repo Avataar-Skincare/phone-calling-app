@@ -87,9 +87,17 @@ installed. It needs no permission and doesn't touch the call session.
 
 ## Permissions (Android)
 
-Before the first call, `src/app/(main)/permissions.tsx` explains the two permissions and asks for
-them once. Declining still works: the dialer opens with the number filled in. The Account screen
-shows the current state and offers **Allow** or **Open Settings**.
+**Call-log access is required to call from the app** ([ADR 0008](decisions/0008-call-log-access-required.md)).
+Before every call, `useCallLead` reads `getCapabilities().canReadCallLog`; when it isn't granted
+(`mustAskForCallLog` in `src/lib/callPermission.ts`), the call is blocked and
+`src/app/(main)/permissions.tsx` opens. It explains the permissions and offers **Allow** (or **Open
+Settings** once Android stops asking) and **Cancel**. The call is placed only when call-log access is
+granted afterwards; there is no "use the dialer instead" option. The Account screen shows the
+current state and offers **Allow** or **Open Settings**.
+
+Every Android call log also sends `call_log_permission: "granted" | "denied"`, read when the call
+ends, so Compass's Agent Audit can count calls whose talk time is unknown (access turned off
+mid-call). iOS sends nothing.
 
 ## SIM choice (Android)
 

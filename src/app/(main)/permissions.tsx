@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Linking, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { AppState, Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 
 import * as SimDialer from "@modules/sim-dialer";
@@ -13,9 +13,10 @@ import { RADIUS, SPACE, useColors } from "@/theme/tokens";
 type Params = { name: string; phone: string; opportunityId?: string; leadId?: string; taskId?: string };
 
 /**
- * Android only, shown once before the first call. Explains the three phone permissions, asks for
- * them, then places the call the agent tapped. Declining still works: the dialer opens with the
- * number filled in and the agent presses call themselves.
+ * Android only. Shown before a call whenever call-log access is missing (ADR 0008): explains the
+ * three phone permissions and asks for them. The call is placed only once call-log access is
+ * granted; there is no "use the dialer instead" way round it, because without the call log the
+ * app can't tell talk time from ringing time.
  */
 export default function PermissionsScreen() {
   const c = useColors();
@@ -23,6 +24,9 @@ export default function PermissionsScreen() {
   const markSeen = useSettingsStore((s) => s.markPermissionIntroSeen);
   const [busy, setBusy] = useState(false);
   const [blocked, setBlocked] = useState(false);
+  const [refused, setRefused] = useState(false);
+
+  const placed = useRef(false);
 
   useEffect(() => {
     SimDialer.getPermissions()
@@ -30,7 +34,9 @@ export default function PermissionsScreen() {
       .catch(() => {});
   }, []);
 
-  async function continueToCall() {
+  async function placeCall() {
+    if (placed.current) return;
+    placed.current = true;
     markSeen();
     router.back();
     if (!p.phone) return;
@@ -43,15 +49,36 @@ export default function PermissionsScreen() {
     }).catch(() => {});
   }
 
+  // Back from Settings with call logs turned on: place the call without another tap.
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+      void SimDialer.getCapabilities()
+        .then((caps) => {
+          if (caps.canReadCallLog) return placeCall();
+        })
+        .catch(() => {});
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- placeCall reads stable route params
+  }, []);
+
   async function allow() {
     setBusy(true);
+    let granted = false;
     try {
-      await SimDialer.requestPermissions();
+      const r = await SimDialer.requestPermissions();
       await SimDialer.startTracking();
+      const caps = await SimDialer.getCapabilities().catch(() => null);
+      granted = caps?.canReadCallLog === true;
+      if (!granted) {
+        setRefused(true);
+        setBlocked(!r.canAskAgain);
+      }
     } finally {
       setBusy(false);
     }
-    await continueToCall();
+    if (granted) await placeCall();
   }
 
   const points: [string, string][] = [
@@ -68,7 +95,9 @@ export default function PermissionsScreen() {
       <View style={{ flex: 1, justifyContent: "center", gap: SPACE.xl }}>
         <View style={{ gap: SPACE.sm }}>
           <AppText variant="title">Allow calling from the app</AppText>
-          <AppText tone="muted">Android will ask for three permissions.</AppText>
+          <AppText tone="muted">
+            Call-log access is required to make calls from this app. Android will ask for three permissions.
+          </AppText>
         </View>
 
         <View style={{ gap: SPACE.md }}>
@@ -92,18 +121,28 @@ export default function PermissionsScreen() {
 
         {blocked ? (
           <AppText tone="amber">
-            These permissions were turned off earlier. Turn on "Phone" and "Call logs" for Compass Dialer in
-            Settings, then come back.
+            Turn on "Phone" and "Call logs" for Compass Dialer in Settings, then come back. Calls can't be
+            made from the app without them.
+          </AppText>
+        ) : refused ? (
+          <AppText tone="amber">
+            Call logs weren't allowed, so the call can't be made. Tap Allow to try again, or turn on "Call
+            logs" in Settings.
           </AppText>
         ) : null}
 
         <View style={{ gap: SPACE.md }}>
-          {blocked ? (
-            <Button title="Open Settings" onPress={() => void Linking.openSettings()} />
-          ) : (
-            <Button title="Allow" onPress={allow} loading={busy} />
-          )}
-          <Button title="Not now, use the dialer" kind="plain" onPress={continueToCall} />
+          {blocked ? null : <Button title="Allow" onPress={allow} loading={busy} />}
+          {/* Android may refuse the prompt silently once call logs were denied for good, so Settings
+              is offered as soon as one attempt fails, not only when Android says it won't ask. */}
+          {blocked || refused ? (
+            <Button
+              title="Open Settings"
+              kind={blocked ? "primary" : "secondary"}
+              onPress={() => void Linking.openSettings()}
+            />
+          ) : null}
+          <Button title="Cancel" kind="plain" onPress={() => router.back()} />
         </View>
       </View>
     </Screen>

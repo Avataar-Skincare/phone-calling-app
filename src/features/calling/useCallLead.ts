@@ -2,10 +2,10 @@ import { useCallback } from "react";
 import { Alert, Platform } from "react-native";
 import { router } from "expo-router";
 
-import { isNativeDialerAvailable } from "@modules/sim-dialer";
+import { getCapabilities, isNativeDialerAvailable } from "@modules/sim-dialer";
+import { mustAskForCallLog } from "@/lib/callPermission";
 import { toE164 } from "@/lib/phone";
 import { useCallStore } from "@/store/call.store";
-import { useSettingsStore } from "@/store/settings.store";
 import { startCall } from "./callFlow";
 
 export interface CallRequest {
@@ -24,7 +24,8 @@ function showError(e: unknown) {
  * Shared tap handler for every call button.
  *  1. Checks the number can be dialed.
  *  2. Refuses while another call is still live.
- *  3. On Android, shows the phone-permission explainer once before the first call.
+ *  3. On Android, blocks the call and shows the permissions screen until call-log access is
+ *     granted (ADR 0008).
  *  4. Places the call and opens a call session.
  */
 export function useCallLead() {
@@ -56,11 +57,11 @@ export function useCallLead() {
       return;
     }
 
-    if (
-      Platform.OS === "android" &&
-      isNativeDialerAvailable &&
-      !useSettingsStore.getState().permissionIntroSeen
-    ) {
+    // Call-log access is required on Android (ADR 0008): checked before every call, since the
+    // agent can turn it off in Settings at any time.
+    const caps =
+      Platform.OS === "android" && isNativeDialerAvailable ? await getCapabilities().catch(() => null) : null;
+    if (mustAskForCallLog(Platform.OS, isNativeDialerAvailable, caps?.canReadCallLog ?? null)) {
       router.push({
         pathname: "/permissions",
         params: {

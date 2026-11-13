@@ -173,6 +173,34 @@ describe("finishCall", () => {
     expect(useCallStore.getState().session?.id).toBe("c2");
   });
 
+  it("Android: marks granted when the call log is readable", async () => {
+    dialer.__setCallLog({ talkSeconds: 10, startedAt: T });
+    await finishCall(ended("android", 30));
+    expect(useCallLog.getState().calls[0]).toMatchObject({ callLogPermission: "granted" });
+  });
+
+  it("Android: marks denied when call log is unreadable", async () => {
+    // Access revoked after the pre-call check: the call is still logged, flagged for the audit.
+    dialer.__setCapabilities({ canReadCallLog: false });
+    jest.useFakeTimers();
+    try {
+      const done = finishCall(ended("android", 30));
+      await jest.advanceTimersByTimeAsync(10_000);
+      await done;
+    } finally {
+      jest.useRealTimers();
+    }
+    expect(useCallLog.getState().calls[0]).toMatchObject({
+      callLogPermission: "denied",
+      talkTimeSeconds: null,
+    });
+  });
+
+  it("iOS: leaves call_log_permission unset", async () => {
+    await finishCall(ended("ios", 200, 9));
+    expect(useCallLog.getState().calls[0]?.callLogPermission).toBeNull();
+  });
+
   it("ignores a call that hasn't ended", async () => {
     const s = createSession(target, { platform: "android", tracked: true, simId: null, now: T, id: "c3" });
     await finishCall(s);

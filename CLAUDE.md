@@ -26,6 +26,9 @@ compile the module: see [docs/development.md](docs/development.md#checking-nativ
 - `modules/sim-dialer`: Kotlin, Swift and `index.ts` must stay in step. `READ_CALL_LOG` is used for
   talk time only ([ADR 0006](docs/decisions/0006-call-times-and-whatsapp.md)); never add write access to
   the call log or contacts.
+- Android calling requires call-log access, checked before **every** call (`mustAskForCallLog`,
+  [ADR 0008](docs/decisions/0008-call-log-access-required.md)); don't add a way to call without it.
+  Each Android call log sends `call_log_permission` for Compass's Agent Audit.
 - `/android` and `/ios` are generated; never edit them.
 - Times to Compass: fields Compass parses (`occurred_at`, filters) are ISO UTC (`toISOString()`).
   The readable call-log details (`call_*_at`) are IST "2026-11-06 18:21:50" (`toIstDateTime()`),
