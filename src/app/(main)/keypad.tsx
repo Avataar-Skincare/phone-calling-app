@@ -9,6 +9,7 @@ import { Icon } from "@/components/icons";
 import { Screen } from "@/components/Screen";
 import { CallBanner } from "@/features/calling/CallBanner";
 import { useCallLead } from "@/features/calling/useCallLead";
+import { useUserDepartmentLabel } from "@/features/leads/useLeadQueries";
 import { claimMessage, type ClaimTone } from "@/lib/claimMessage";
 import { dialTarget, MAX_DIAL_LENGTH, pressKey, sanitizeDialInput } from "@/lib/dialInput";
 import { formatPhone } from "@/lib/phone";
@@ -24,6 +25,7 @@ const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "+", "0", "back"] as 
 export default function KeypadScreen() {
   const c = useColors();
   const callLead = useCallLead();
+  const departmentLabel = useUserDepartmentLabel();
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ text: string; tone: ClaimTone } | null>(null);
@@ -40,7 +42,7 @@ export default function KeypadScreen() {
     try {
       const phone = sanitizeDialInput(value).trim();
       const result = await claimWithCap(phone);
-      setMessage(claimMessage(result));
+      setMessage(claimMessage(result, departmentLabel));
       const claim = result === "error" ? null : result;
       await callLead({
         name: claim?.lead_name ?? formatPhone(target.e164),
@@ -86,7 +88,7 @@ export default function KeypadScreen() {
             value={value}
             onChangeText={(t) => edit(sanitizeDialInput(t))}
             keyboardType="phone-pad"
-            placeholder="Paste or type a number"
+            placeholder="Type or paste a number"
             placeholderTextColor={c.muted}
             maxLength={MAX_DIAL_LENGTH * 2} // room for a paste with stray characters; cleaned on change
             selectTextOnFocus={false}
@@ -105,7 +107,7 @@ export default function KeypadScreen() {
           ) : null}
         </View>
         <AppText variant="small" tone={target ? "accent" : "muted"}>
-          {target ? target.display : "Enter a 10-digit mobile number"}
+          {target ? target.display : "Enter a 10 digit mobile number"}
         </AppText>
         {message ? (
           <View

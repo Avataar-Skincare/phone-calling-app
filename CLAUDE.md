@@ -57,7 +57,7 @@ the phone's own dialer and the app uploads that file afterwards.
 
 **Flow:** the agent picks the dialer's recordings folder once in Settings (read-only folder grant,
 no storage permission) → call ends → app logs it (`POST /activities/log`, returns `activity_id`) →
-summary card finds the recording by time and number and shows **Upload** (or **Choose file**) →
+the Upload call recording screen opens by itself (`src/app/(main)/recording.tsx`, `RecordingPrompt`; the summary card row is the fallback) and finds the recording by time and number, **Upload** (or **Choose file**) →
 `POST /mobile-dialer/recordings/:activityId/upload-url` → phone PUTs the file to S3 →
 `POST /mobile-dialer/recordings/:activityId/complete` → Compass saves `recording_url`, so ▶ Play
 works on the website and in the Calls tab. Code: `src/features/recordings/`,

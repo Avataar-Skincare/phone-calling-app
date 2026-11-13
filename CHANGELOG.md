@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (2026-11-13, recording screen)
+
+- **Upload call recording screen opens by itself.** After an answered Android call, a full screen
+  walks the agent through choosing the recordings folder, finding the file and uploading it (Skip
+  is always there; the summary card row stays as the fallback). It opens once per call, only for
+  calls that just ended. JavaScript only.
+
+### Changed (2026-11-13, plain English)
+
+- Keypad and recording messages are now short, simple English. The keypad names the caller's
+  department when only Sales users can change the owner (for example "You are a Central user.").
+  Recording row texts: "Choose recordings folder", "Recording not found".
+
 ### Added (2026-11-13, keypad)
 
 - **Keypad: call a number management sent on WhatsApp.** New round dial-pad button in the home

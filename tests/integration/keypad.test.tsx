@@ -12,7 +12,7 @@ import * as SimDialer from "@modules/sim-dialer";
 import { useCallLog } from "@/store/callLog.store";
 import { useCallStore } from "@/store/call.store";
 import { useSettingsStore } from "@/store/settings.store";
-import { fakeCompass } from "../support/compass";
+import { agent, fakeCompass } from "../support/compass";
 import { resetAppState, signedInAs } from "../support/state";
 
 jest.mock("@modules/sim-dialer");
@@ -61,7 +61,7 @@ describe("keypad dialing", () => {
     await waitFor(() => expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null));
     expect(claimsAtDial).toBe(1);
     expect(server.find("POST", CLAIM)[0]?.body).toEqual({ phone: "+91 98765-00001" });
-    expect(await screen.findByText("Moved to you from Rahul")).toBeTruthy();
+    expect(await screen.findByText("Lead moved to you from Rahul.")).toBeTruthy();
 
     const start = Date.now();
     act(() => dialer.__emit({ state: "offhook", at: start + 1_000 }));
@@ -77,7 +77,7 @@ describe("keypad dialing", () => {
       opportunity_id: "7001",
     });
     // The status message is still there after the call
-    expect(screen.getByText("Moved to you from Rahul")).toBeTruthy();
+    expect(screen.getByText("Lead moved to you from Rahul.")).toBeTruthy();
   });
 
   it("edits with the on-screen keys", async () => {
@@ -99,7 +99,7 @@ describe("keypad dialing", () => {
     fireEvent.press(screen.getByLabelText("Call number"));
 
     await waitFor(() => expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null));
-    expect(await screen.findByText("Couldn't reach Compass — calling anyway, lead not moved")).toBeTruthy();
+    expect(await screen.findByText("Could not reach Compass. Calling now. Owner not changed.")).toBeTruthy();
     expect(useCallStore.getState().session).toMatchObject({
       name: "+91 98765 00001",
       opportunityId: null,
@@ -108,6 +108,7 @@ describe("keypad dialing", () => {
   });
 
   it("still dials when Compass says only Sales can take leads", async () => {
+    signedInAs({ ...agent, departmentId: "3" }); // a Central user
     const server = fakeCompass();
     server.on("POST", CLAIM, {
       body: {
@@ -126,7 +127,11 @@ describe("keypad dialing", () => {
     fireEvent.press(screen.getByLabelText("Call number"));
 
     await waitFor(() => expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null));
-    expect(await screen.findByText("Only Sales can take leads — calling without moving it")).toBeTruthy();
+    expect(
+      await screen.findByText(
+        "You are a Central user. Only Sales users can change the owner by manual dialing.",
+      ),
+    ).toBeTruthy();
   });
 
   it("dials after 3 s when Compass is too slow", async () => {
@@ -140,14 +145,14 @@ describe("keypad dialing", () => {
     await waitFor(() => expect(dialer.placeCall).toHaveBeenCalledWith("+919876500001", null), {
       timeout: 6_000,
     });
-    expect(await screen.findByText("Couldn't reach Compass — calling anyway, lead not moved")).toBeTruthy();
+    expect(await screen.findByText("Could not reach Compass. Calling now. Owner not changed.")).toBeTruthy();
   }, 15_000);
 
   it("won't call a number that is too short, and sends nothing", async () => {
     const server = fakeCompass();
     await openKeypad();
     enter("98765");
-    expect(screen.getByText("Enter a 10-digit mobile number")).toBeTruthy();
+    expect(screen.getByText("Enter a 10 digit mobile number")).toBeTruthy();
     fireEvent.press(screen.getByLabelText("Call number"));
     expect(server.find("POST", CLAIM)).toHaveLength(0);
     expect(dialer.placeCall).not.toHaveBeenCalled();

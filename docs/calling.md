@@ -112,7 +112,15 @@ with the phone's own dialer and the app uploads that file.
 - **Settings → Calling → Call recordings folder**: the agent picks the dialer's folder once
   (Samsung `Recordings/Call`, Xiaomi `MIUI/sound_recorder/call_rec`). Read-only access to that
   folder only; no storage permission. Re-checked on focus; if Android revoked it, shown as "Not set".
-- **Summary card** (`RecordingRow`, answered Android calls only): lists the folder for the call
+- **Upload call recording screen** (`src/app/(main)/recording.tsx`): opens by itself after an
+  answered Android call (`RecordingPrompt` in the main layout; once per call, only for calls that end
+  while the app runs, within 2 minutes, or within 10 minutes if the app was in the background; Skip
+  never brings it back). Steps: choose folder (if none), looking, found → **Upload**, not found →
+  **Choose file** / **Look again**, uploading, uploaded (closes after 2 s), failed → **Try again**
+  (`recordingErrorMessage` in `src/lib/recordingMessages.ts` turns errors into plain words). Shares
+  all logic with the summary card row through `useCallRecording`. All text is short, plain English
+  for agents with limited English.
+- **Summary card** (`RecordingRow`, the fallback for later, answered Android calls only): lists the folder for the call
   window (`recordingWindow` in `src/lib/recordingMatch.ts`: tap − 1 min to end + 10 min), rescans
   every 5 s up to 6 times, and shows "Recording found · time · size" with **Upload**; "No recording
   found" with **Choose file** (that folder's audio from the last 2 hours); or a link to Settings

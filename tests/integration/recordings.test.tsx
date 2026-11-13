@@ -46,6 +46,9 @@ async function callAndHangUp(server = fakeCompass()) {
   act(() => dialer.__emit({ state: "offhook", at: start + 1_000 }));
   dialer.__setCallLog({ talkSeconds: 80, startedAt: start });
   act(() => dialer.__emit({ state: "idle", at: start + 92_000 }));
+  // The Upload call recording screen opens by itself; these tests are about the card, so skip it
+  fireEvent.press(await screen.findByLabelText("Skip"));
+  await waitFor(() => expect(screen.queryByText("Upload call recording")).toBeNull());
   expect(await screen.findByText("Call to Asha Rao · Connected")).toBeTruthy();
   // The call is in Compass before the agent can upload
   await waitFor(() => expect(useCallLog.getState().calls[0]?.activityId).toBe("8001"));
@@ -111,7 +114,7 @@ describe("call recording upload", () => {
     await callAndHangUp();
 
     fireEvent.press(await screen.findByLabelText("Upload recording"));
-    expect(await screen.findByText("Upload refused by storage (403)")).toBeTruthy();
+    expect(await screen.findByText("Upload was refused. Please tell your team lead.")).toBeTruthy();
 
     dialer.__setUploadStatus(200);
     fireEvent.press(screen.getByLabelText("Retry"));
@@ -122,7 +125,7 @@ describe("call recording upload", () => {
     dialer.__setRecordingsFolder(FOLDER);
     useSettingsStore.setState({ recordingsFolder: FOLDER });
     await callAndHangUp();
-    expect(await screen.findByText("No recording found")).toBeTruthy();
+    expect(await screen.findByText("Recording not found")).toBeTruthy();
 
     // A file from an hour ago is not a match, but is in the picker's 2-hour list
     dialer.__setRecordings([
@@ -143,7 +146,7 @@ describe("call recording upload", () => {
     const server = fakeCompass();
     await callAndHangUp(server);
 
-    fireEvent.press(await screen.findByText("Set your recordings folder to upload call recordings"));
+    fireEvent.press(await screen.findByText("Choose recordings folder"));
     expect(await screen.findByText("Call recordings folder")).toBeTruthy();
     expect(server.requests.filter((r) => r.method !== "GET").map((r) => r.path)).toEqual(["/activities/log"]);
   });
