@@ -84,7 +84,7 @@ export interface SharedRecording {
   /** epoch ms: when the file arrived */
   sharedAt: number;
   /** Set when the file could not be copied: over 25 MB, or not readable. */
-  error?: "too_big" | "unreadable";
+  error?: "too_big" | "unreadable" | "not_audio";
 }
 
 export interface Sim {

@@ -20,6 +20,7 @@ const CLOSE_AFTER_UPLOAD_MS = 2_000;
 function fileProblem(file: SharedRecording): string | null {
   if (file.error === "too_big") return "This recording is over 25 MB, too large to upload.";
   if (file.error === "unreadable") return "Could not read the shared file.";
+  if (file.error === "not_audio") return "This isn't a supported audio file.";
   return recordingProblem(file);
 }
 

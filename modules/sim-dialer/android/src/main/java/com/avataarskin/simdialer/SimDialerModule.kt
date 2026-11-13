@@ -487,13 +487,17 @@ class SimDialerModule : Module() {
     }
 
   /**
-   * The audio Uri of an ACTION_SEND intent, and marks the intent used (stream removed, neutral
+   * The file Uri of an ACTION_SEND intent, and marks the intent used (stream removed, neutral
    * action) so it is never handled twice. null for anything else; such intents are left alone.
+   *
+   * Any type is taken here: Google's Phone app shares call recordings (record-<ms>.wav) with a
+   * generic type rather than an audio one, so an audio-only filter hid the app from its share
+   * sheet (seen on a Nothing CMF phone, 2026-11-13). copyShared decides "is it audio" from the
+   * type OR the file name. (Never write a slash-star pair in a KDoc here: Kotlin nests comments.)
    */
   @Suppress("DEPRECATION")
   private fun takeShareUri(intent: Intent): Uri? {
     if (intent.action != Intent.ACTION_SEND) return null
-    if (intent.type?.startsWith("audio/") != true) return null
     val uri: Uri? =
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
@@ -555,6 +559,8 @@ class SimDialerModule : Module() {
       return m
     }
 
+    // Shares of any type reach us (see takeShareUri); only audio is kept, judged by type or name.
+    if (!isAudio(name, mime.ifEmpty { resolved ?: intentType })) return result("", 0, "not_audio")
     if (declared > MAX_SHARED_BYTES) return result("", declared, "too_big")
 
     val safe = name.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(80)

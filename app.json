@@ -21,7 +21,7 @@
         {
           "action": "SEND",
           "category": ["DEFAULT"],
-          "data": [{ "mimeType": "audio/*" }]
+          "data": [{ "mimeType": "*/*" }]
         }
       ],
       "adaptiveIcon": {

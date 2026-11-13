@@ -104,6 +104,46 @@ describe("Share a recording to the app", () => {
     expect(useCallLog.getState().calls[0]?.recording?.status).toBe("uploaded");
   });
 
+  it("takes Google Phone's share with no audio type, judging the file by its .wav name", async () => {
+    // Seen on a Nothing CMF phone: Google Phone shares record-<ms>.wav with a generic type, so
+    // the native module reports no mime type. The upload must still be signed as audio/wav.
+    const call = loggedCall();
+    useCallLog.setState({ calls: [call] });
+    const server = fakeCompass();
+    renderRouter("./src/app", { initialUrl: "/" });
+    await screen.findByLabelText("Asha Rao, open lead");
+
+    act(() => dialer.__shareRecording({ ...shared(nameAt(call.tappedAt + 20_000)), mimeType: "" }));
+
+    expect(await screen.findByText("This recording is for:")).toBeTruthy();
+    fireEvent.press(screen.getByLabelText("Upload"));
+    expect(await screen.findByText("Uploaded. Thank you!")).toBeTruthy();
+    const [req] = server.find("POST", "/mobile-dialer/recordings/8001/upload-url");
+    expect(req?.body).toMatchObject({ content_type: "audio/wav", size_bytes: 1_200_000 });
+  });
+
+  it("turns away a shared file that is not audio, in plain words", async () => {
+    const call = loggedCall();
+    useCallLog.setState({ calls: [call] });
+    const server = fakeCompass();
+    renderRouter("./src/app", { initialUrl: "/" });
+    await screen.findByLabelText("Asha Rao, open lead");
+
+    act(() =>
+      dialer.__shareRecording({
+        uri: "",
+        name: "IMG_2041.jpg",
+        sizeBytes: 0,
+        mimeType: "",
+        sharedAt: Date.now(),
+        error: "not_audio",
+      }),
+    );
+
+    expect(await screen.findByText("This file is not a supported audio file.")).toBeTruthy();
+    expect(server.find("POST", "/mobile-dialer/recordings/8001/upload-url")).toHaveLength(0);
+  });
+
   it("asks which call when none matches, then uploads for the chosen call", async () => {
     const call = loggedCall();
     useCallLog.setState({ calls: [call] });

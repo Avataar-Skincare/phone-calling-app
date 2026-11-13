@@ -14,7 +14,10 @@ the recording → **Share**. The app has to be on that share sheet.
 ## Decision
 
 1. **Share target for audio.** `app.json` → `expo.android.intentFilters` declares
-   `ACTION_SEND`, category `DEFAULT`, `audio/*` (no `autoVerify`, no new permission). It reaches the
+   `ACTION_SEND`, category `DEFAULT`, `*/*` (no `autoVerify`, no new permission). First built as
+   `audio/*`; on a Nothing CMF phone Google Phone shared `record-<ms>.wav` with a generic type and
+   the app was missing from its share sheet, so any type is accepted and the app keeps only audio,
+   judged by type or file name ("This file is not a supported audio file." otherwise). It reaches the
    merged `AndroidManifest.xml` on `MainActivity`. `app.config.ts` spreads `config.android`, so
    `app.json` is the single place.
 2. **Copy at once.** The sender's read grant on the shared `content://` Uri lasts only while the

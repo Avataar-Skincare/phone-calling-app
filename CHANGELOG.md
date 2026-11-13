@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+- Share target accepts any file type: Google's Phone app shares call recordings (`record-<ms>.wav`)
+  with a generic type, so the audio-only filter kept Compass Dialer out of its share sheet (Nothing
+  CMF, 13 Nov). Non-audio files are turned away with "This file is not a supported audio file."
+  Needs a new dev/store build.
+
 ### Added (2026-11-13, share a recording to the app)
 
 - **Upload a call recording by sharing it to Compass Dialer (Android).** For phones whose dialer is

@@ -130,8 +130,9 @@ with the phone's own dialer and the app uploads that file.
   stores the result in `FinishedCall.recording`; ignores a second tap while uploading.
 - **Share from Google Phone** ([ADR 0010](decisions/0010-share-recording-to-app.md)): where the
   dialer keeps recordings inside its own app (Nothing/CMF, Pixel, Motorola) there is no folder. The
-  agent opens Phone → Recents → the call → the recording → Share → **Compass Dialer**. The app is an
-  `audio/*` share target; `SimDialerModule` copies the file to `cacheDir/shared-recordings` at once
+  agent opens Phone → Recents → the call → the recording → Share → **Compass Dialer**. The app is a
+  share target for any type (`*/*`), because Google Phone shares recordings with a generic type,
+  not an audio one; only audio is kept (judged by type or file name), anything else is turned away; `SimDialerModule` copies the file to `cacheDir/shared-recordings` at once
   (25 MB cap, files older than 3 days cleaned up) and hands it to JS by `takeSharedRecording()`
   (cold start, app to front) or the `sharedRecording` event (app running). `SharedRecordingWatcher`
   (main layout) opens `/recording?shared=1`, which shows "This recording is for: Call to {name}" +

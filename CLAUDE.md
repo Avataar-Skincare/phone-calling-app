@@ -66,7 +66,7 @@ app's second write to Compass (ADR 0007 supersedes the "only write" line in 0005
 
 **Google Phone (Nothing/CMF, Pixel, Motorola) keeps recordings inside the Phone app, so there is no
 folder to pick ([ADR 0010](docs/decisions/0010-share-recording-to-app.md)).** The agent opens
-Phone → Recents → the call → the recording → **Share** → **Compass Dialer**. The app is an `audio/*`
+Phone → Recents → the call → the recording → **Share** → **Compass Dialer**. The app is an any-type (`*/*`, Google Phone's share is not typed as audio)
 share target (`app.json` intent filter), copies the file to its cache at once (`takeSharedRecording`,
 event `sharedRecording`), matches it to a call from the time in the name (`record-<epoch ms>.wav`,
 `src/lib/sharedRecordingMatch.ts`), and uploads it with the same `uploadRecording`. Watcher:
