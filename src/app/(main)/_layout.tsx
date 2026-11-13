@@ -12,6 +12,7 @@ export default function MainLayout() {
       <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }}>
         <Stack.Screen name="index" />
         <Stack.Screen name="lead/[opportunityId]" />
+        <Stack.Screen name="keypad" />
         <Stack.Screen name="settings" />
         <Stack.Screen name="permissions" options={{ presentation: "modal" }} />
       </Stack>

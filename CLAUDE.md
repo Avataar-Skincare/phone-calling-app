@@ -21,6 +21,9 @@ compile the module: see [docs/development.md](docs/development.md#checking-nativ
   out, clear the session; never navigate to login.
 - Screens use `LeadItem`, never raw Smart View rows.
 - Rules live in pure functions in `src/lib/` with a `*.test.ts`. Change both together.
+- Keypad calls (`src/app/(main)/keypad.tsx`) claim the lead first via `src/api/mobileDialer.ts`, capped at
+  3 s, then dial through `useCallLead()`; the call must always go ahead ([ADR 0009](docs/decisions/0009-keypad-claim.md)).
+  List calls never claim.
 - Call sessions: all transitions in `src/lib/callState.ts`. `startCall()` stores the session before
   dialing.
 - `modules/sim-dialer`: Kotlin, Swift and `index.ts` must stay in step. `READ_CALL_LOG` is used for

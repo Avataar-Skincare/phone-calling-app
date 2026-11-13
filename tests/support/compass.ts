@@ -211,6 +211,20 @@ export function fakeCompass() {
     },
   });
 
+  // Keypad dial (ADR 0009): the lead moves to the caller from "Rahul".
+  on("POST", "/mobile-dialer/claim", {
+    body: {
+      status: "claimed",
+      lead_id: "501",
+      lead_name: "Asha Rao",
+      lead_created: false,
+      opportunity_id: "7001",
+      previous_owner_user_id: "12",
+      previous_owner_name: "Rahul",
+      changed: true,
+    },
+  });
+
   // Call recording upload (ADR 0007): a presigned PUT link, then "complete".
   on("POST", /^\/mobile-dialer\/recordings\/\d+\/upload-url$/, (req) => ({
     body: {

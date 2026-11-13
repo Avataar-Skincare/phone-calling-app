@@ -85,6 +85,25 @@ A new call can start while the last one is still being finished.
 WhatsApp chat with the client on Android and iPhone, or WhatsApp's web page when the app isn't
 installed. It needs no permission and doesn't touch the call session.
 
+## Keypad
+
+[ADR 0009](decisions/0009-keypad-claim.md). The round dial-pad button in the home header opens
+`src/app/(main)/keypad.tsx`: a number field (long-press → Paste works; WhatsApp's invisible
+direction marks are stripped), an on-screen pad (1–9, +, 0, backspace) and **Call**, with the
+formatted number underneath. On **Call**:
+
+1. `dialTarget` (`src/lib/dialInput.ts`) turns the text into E.164; too short or not a mobile
+   number keeps Call disabled.
+2. `claimWithCap` (`src/api/mobileDialer.ts`) asks Compass to move the lead to the agent, 3 s at
+   most (see [compass-api.md](compass-api.md#keypad-claim)).
+3. `claimMessage` (`src/lib/claimMessage.ts`) shows what happened, inline, and it stays after the
+   call.
+4. The shared `useCallLead()` dials with the claim's `opportunityId` / `leadId`, so the call is
+   logged and its recording uploaded exactly like a list call. **The call always goes ahead**, also
+   when the claim fails or times out (then there is no opportunity on the call).
+
+List calls don't claim. The call summary card (`CallBanner`) also shows on the Keypad screen.
+
 ## Call recordings (Android)
 
 [ADR 0007](decisions/0007-call-recording-upload.md). The app can't record calls; the agent records

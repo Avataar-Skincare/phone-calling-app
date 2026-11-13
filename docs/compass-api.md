@@ -153,3 +153,30 @@ All with the agent's token except step 2.
 3. `POST /mobile-dialer/recordings/:activityId/complete`, body `{ "key": "<key from step 1>" }`
    replies `{ "recording_url": "...", "size_bytes": 2100000 }`. 400 `NOT_UPLOADED` (S3 doesn't have
    the file yet), `KEY_MISMATCH`.
+
+## Keypad claim
+
+[ADR 0009](decisions/0009-keypad-claim.md); `src/api/mobileDialer.ts` (`claimByPhone`,
+`claimWithCap`). Sent before a keypad call, with the agent's token.
+
+`POST /mobile-dialer/claim`, body `{ "phone": "+91 98765-00001" }` (as typed; Compass strips spaces,
+dashes and +91; 10–20 characters of digits, spaces, `+ - ( )`). Replies 200:
+
+```json
+{
+  "status": "claimed",
+  "lead_id": "501",
+  "lead_name": "Asha Rao",
+  "lead_created": false,
+  "opportunity_id": "7001",
+  "previous_owner_user_id": "12",
+  "previous_owner_name": "Rahul",
+  "changed": true
+}
+```
+
+`status`: `claimed` (the lead's Sales opportunity moved to the caller; Compass logs "Owner changed
+due to manual dialing"), `already_owner`, `created` (unknown number: new lead owned by the caller),
+`no_opportunity` (the lead has no Sales opportunity), `not_sales` (the caller isn't in Sales;
+nothing changed). 400 = invalid phone; 401/403 as elsewhere. The app waits 3 s at most and dials
+whatever happens.

@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added (2026-11-13, keypad)
+
+- **Keypad: call a number management sent on WhatsApp.** New round dial-pad button in the home
+  header opens a Keypad screen: paste or type the number (or use the on-screen pad) and tap Call.
+  Compass first moves that lead to the caller (3 s at most; a new lead is created for an unknown
+  number; only Sales can take leads), then the call goes through the normal flow, so it is logged
+  as a Manual Outbound Call and its recording can be uploaded. The call always goes ahead, even if
+  Compass can't be reached, and the screen says what happened
+  ([ADR 0009](docs/decisions/0009-keypad-claim.md)). JavaScript only: no new store build needed for
+  development builds; ships in the next store build.
+
 ### Added (2026-11-13)
 
 - **Android: upload the phone dialer's call recording with one tap.** Pick the dialer's recordings
