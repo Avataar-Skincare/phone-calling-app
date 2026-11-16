@@ -6,6 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-16
+
+First Play update after 1.0.0 (build 4). Everything below "1.1.0" until 1.0.0 ships in it: Keypad
+(claim the lead, Sales only), call recording upload (folder and share from Google Phone),
+the upload screen after calls, the "Before you start" check, `call_diag`, plain-English messages.
+
+### Removed
+
+- `SYSTEM_ALERT_WINDOW` ("draw over other apps"), which Expo adds by default and the app never
+  uses (`android.blockedPermissions` in `app.json`), so Google Play has one less permission to
+  question.
+
 ### Added (2026-11-13, startup check and call diagnostics)
 
 - **"Before you start" check when the app opens (Android).** Looks at phone access and call logs
