@@ -49,6 +49,19 @@ export function useUserDepartment() {
   return { code, canSwitch, isLoading, error: query.error };
 }
 
+/** The user's department label as Compass names it ("Sales", "Central"), or null when unknown. */
+export function useUserDepartmentLabel(): string | null {
+  const departmentId = useAuthStore((s) => s.session?.user.departmentId ?? null);
+  const query = useQuery({
+    queryKey: leadKeys.departments,
+    queryFn: getDepartments,
+    staleTime: Infinity,
+    enabled: departmentId !== null,
+  });
+  if (departmentId === null) return null;
+  return query.data?.find((x) => String(x.id) === String(departmentId))?.label ?? null;
+}
+
 export function useSmartViewDefinitions(department: DepartmentCode | null) {
   const query = useQuery({
     queryKey: leadKeys.definitions,

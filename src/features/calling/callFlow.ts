@@ -1,9 +1,11 @@
 import * as SimDialer from "@modules/sim-dialer";
+import type { CallDiag } from "@/lib/callDiag";
 import type { CallLogPermission } from "@/lib/callLog";
 import { callTimes, createSession, type CallSession, type CallTarget } from "@/lib/callState";
 import { useAuthStore } from "@/store/auth.store";
 import { useCallLog } from "@/store/callLog.store";
 import { useCallStore } from "@/store/call.store";
+import { collectCallDiag } from "./collectCallDiag";
 import { flushCallLog } from "./sendCalls";
 import { useSettingsStore } from "@/store/settings.store";
 
@@ -52,6 +54,7 @@ export async function finishCall(session: CallSession): Promise<void> {
   try {
     let logTalk: number | null = null;
     let callLogPermission: CallLogPermission | null = null;
+    let callDiag: CallDiag | null = null;
     if (session.platform === "android" && SimDialer.isNativeDialerAvailable) {
       // Checked at the end of the call: access can be revoked after the pre-call check (ADR 0008).
       const caps = await SimDialer.getCapabilities().catch(() => null);
@@ -66,12 +69,19 @@ export async function finishCall(session: CallSession): Promise<void> {
         ).catch(() => null);
         logTalk = entry?.talkSeconds ?? null;
       }
+      // Only a call whose talk time is missing gets diagnostics (ADR 0011).
+      if (logTalk === null && SimDialer.isNativeDialerAvailable) {
+        callDiag = await collectCallDiag(session.phone, session.tappedAt - CALL_LOG_SLACK_MS).catch(
+          () => null,
+        );
+      }
     }
 
     const user = useAuthStore.getState().session?.user;
     useCallLog.getState().add({
       ...callTimes(session, logTalk),
       callLogPermission,
+      callDiag,
       id: session.id,
       userId: user ? String(user.id) : null,
       agentName: user?.name ?? null,

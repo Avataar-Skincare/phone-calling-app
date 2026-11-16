@@ -2,6 +2,7 @@
  * Call → Compass "Manual Outbound Call" activity (ADR 0005 + 0006). Pure functions, covered by
  * callLog.test.ts.
  */
+import type { CallDiag } from "./callDiag";
 import type { CallTimes } from "./callState";
 import { toIstDateTime } from "./time";
 
@@ -28,6 +29,11 @@ export interface CallForLog extends CallTimes {
    * and without the native module; missing on calls stored by older app versions.
    */
   callLogPermission?: CallLogPermission | null;
+  /**
+   * Android: small diagnostics, kept ONLY when talk time could not be read (ADR 0011). Missing on
+   * every call that has talk time.
+   */
+  callDiag?: CallDiag | null;
 }
 
 export type CallLogPermission = "granted" | "denied";
@@ -41,7 +47,7 @@ export interface CallLogRequest {
    * most 2 days old, so a call sent late after being offline still lands at the right time.
    */
   occurred_at: string;
-  data: Record<string, string | number>;
+  data: Record<string, string | number | CallDiag>;
 }
 
 /**
@@ -61,10 +67,12 @@ const shown = toIstDateTime;
  *   call_talk_seconds      talk time (iOS: answer → end; Android: call log)
  *   call_ring_seconds      total − talk
  *   call_log_permission    Android only: "granted" | "denied" (ADR 0008)
- * Talk, ring and call_log_permission are left out when unknown.
+ *   call_diag              Android, only when talk time is missing: permission states, whether the
+ *                          phone shows a call log, why the lookup failed, phone and app (ADR 0011)
+ * Talk, ring, call_log_permission and call_diag are left out when unknown.
  */
 export function buildCallLogRequest(call: CallForLog): CallLogRequest {
-  const data: Record<string, string | number> = {
+  const data: Record<string, string | number | CallDiag> = {
     call_tapped_at: shown(call.tappedAt),
     call_started_at: shown(call.startedAt ?? call.tappedAt),
     call_ended_at: shown(call.endedAt),
@@ -81,6 +89,8 @@ export function buildCallLogRequest(call: CallForLog): CallLogRequest {
   if (call.ringTimeSeconds !== null) data.call_ring_seconds = call.ringTimeSeconds;
   if (call.simId) data.call_sim = call.simId;
   if (call.callLogPermission) data.call_log_permission = call.callLogPermission;
+  // Never sent with a known talk time, even if a diag was stored.
+  if (call.callDiag && call.talkTimeSeconds === null) data.call_diag = call.callDiag;
 
   return {
     phone: compassPhone(call.phone),

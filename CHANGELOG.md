@@ -6,6 +6,75 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-11-16
+
+First Play update after 1.0.0 (build 4). Everything below "1.1.0" until 1.0.0 ships in it: Keypad
+(claim the lead, Sales only), call recording upload (folder and share from Google Phone),
+the upload screen after calls, the "Before you start" check, `call_diag`, plain-English messages.
+
+### Removed
+
+- `SYSTEM_ALERT_WINDOW` ("draw over other apps"), which Expo adds by default and the app never
+  uses (`android.blockedPermissions` in `app.json`), so Google Play has one less permission to
+  question.
+
+### Added (2026-11-13, startup check and call diagnostics)
+
+- **"Before you start" check when the app opens (Android).** Looks at phone access and call logs
+  when the app opens and each time it comes back to the foreground. Missing access must be fixed
+  (no Skip). If access is on but the phone is hiding the call log (Xiaomi, Realme, Oppo), a warning
+  explains what to switch on, with **Open settings**, **Check again** and **Skip** (quiet for 24
+  hours). Recording tips never block: share steps on Google Phone only (the recordings folder stays in
+  Settings, not on this screen). Settings
+  has **Check my phone**. On Google Phone the recording screen now shows the share steps first. The
+  check at call time stays as the safety net
+  ([ADR 0011](docs/decisions/0011-startup-check-and-call-diag.md)).
+- **`call_diag` on calls with no talk time only.** Permission states, whether the phone shows a
+  call log, why the lookup failed, phone model and app version, sent as `data.call_diag` with the
+  call log (counts and flags only; never on a call with talk time). Shows which switch is off, as
+  in Bavadharani's case. No Compass change needed.
+- **Needs a new dev/store build: native.** New `SimDialerModule` functions `callLogVisibleCount`,
+  `defaultDialerPackage`, `callLogLookupDebug`. An older build still runs, with "unknown" values.
+
+- Share target accepts any file type: Google's Phone app shares call recordings (`record-<ms>.wav`)
+  with a generic type, so the audio-only filter kept Compass Dialer out of its share sheet (Nothing
+  CMF, 13 Nov). Non-audio files are turned away with "This file is not a supported audio file."
+  Needs a new dev/store build.
+
+### Added (2026-11-13, share a recording to the app)
+
+- **Upload a call recording by sharing it to Compass Dialer (Android).** For phones whose dialer is
+  Google's Phone app (Nothing/CMF, Pixel, Motorola), which keeps recordings inside the app: open
+  the call in Recents → the recording → Share → Compass Dialer. The app copies the file, works out
+  which call it is for from the time in the file name (`record-<epoch ms>.wav`) and asks the agent to
+  confirm, or to choose the call, then uploads it like any other recording
+  ([ADR 0010](docs/decisions/0010-share-recording-to-app.md)). **Needs a new dev/store build:
+  native** (share-target intent filter and `SimDialerModule` changes).
+
+### Added (2026-11-13, recording screen)
+
+- **Upload call recording screen opens by itself.** After an answered Android call, a full screen
+  walks the agent through choosing the recordings folder, finding the file and uploading it (Skip
+  is always there; the summary card row stays as the fallback). It opens once per call, only for
+  calls that just ended. JavaScript only.
+
+### Changed (2026-11-13, plain English)
+
+- Keypad and recording messages are now short, simple English. The keypad names the caller's
+  department when only Sales users can change the owner (for example "You are a Central user.").
+  Recording row texts: "Choose recordings folder", "Recording not found".
+
+### Added (2026-11-13, keypad)
+
+- **Keypad: call a number management sent on WhatsApp.** New round dial-pad button in the home
+  header opens a Keypad screen: paste or type the number (or use the on-screen pad) and tap Call.
+  Compass first moves that lead to the caller (3 s at most; a new lead is created for an unknown
+  number; only Sales can take leads), then the call goes through the normal flow, so it is logged
+  as a Manual Outbound Call and its recording can be uploaded. The call always goes ahead, even if
+  Compass can't be reached, and the screen says what happened
+  ([ADR 0009](docs/decisions/0009-keypad-claim.md)). JavaScript only: no new store build needed for
+  development builds; ships in the next store build.
+
 ### Added (2026-11-13)
 
 - **Android: upload the phone dialer's call recording with one tap.** Pick the dialer's recordings

@@ -122,6 +122,27 @@ Appointment, WhatsApp chat, Assign Owner, Edit Name, AI call analysis, in-app re
 }
 ```
 
+Android also sends `call_log_permission` (`"granted"` / `"denied"`, [ADR 0008](decisions/0008-call-log-access-required.md)).
+**Only when talk time could not be read**, it adds a nested `call_diag` object
+([ADR 0011](decisions/0011-startup-check-and-call-diag.md)); Compass keeps it in
+`activity_type_attributes` like any other `data` key. Calls with talk time never carry it:
+
+```json
+"call_diag": {
+  "phone": "granted | denied",
+  "phone_state": "granted | denied",
+  "call_log": "granted | denied",
+  "call_log_visible": "yes | no | unknown",
+  "lookup": "no_permission | not_found | number_mismatch | error",
+  "device": "Xiaomi Redmi Note 12 · Android 14",
+  "app": "1.0.0 (12)"
+}
+```
+
+`call_log_visible` is whether the phone showed any call-log entries from the last 30 days (`no` with
+`call_log: granted` means the phone maker hides the log). `lookup` is why this call's entry was not
+found. Counts and flags only: no numbers other than the lead's, no call-log contents.
+
 `occurred_at` is the call's end time. Compass uses it as the activity time when it is at most 2
 days old and not in the future, otherwise its own clock, so a call queued offline still shows at the
 time it happened (Compass `feat/activity-log-occurred-at`). **Compass must be deployed with that
@@ -153,3 +174,30 @@ All with the agent's token except step 2.
 3. `POST /mobile-dialer/recordings/:activityId/complete`, body `{ "key": "<key from step 1>" }`
    replies `{ "recording_url": "...", "size_bytes": 2100000 }`. 400 `NOT_UPLOADED` (S3 doesn't have
    the file yet), `KEY_MISMATCH`.
+
+## Keypad claim
+
+[ADR 0009](decisions/0009-keypad-claim.md); `src/api/mobileDialer.ts` (`claimByPhone`,
+`claimWithCap`). Sent before a keypad call, with the agent's token.
+
+`POST /mobile-dialer/claim`, body `{ "phone": "+91 98765-00001" }` (as typed; Compass strips spaces,
+dashes and +91; 10–20 characters of digits, spaces, `+ - ( )`). Replies 200:
+
+```json
+{
+  "status": "claimed",
+  "lead_id": "501",
+  "lead_name": "Asha Rao",
+  "lead_created": false,
+  "opportunity_id": "7001",
+  "previous_owner_user_id": "12",
+  "previous_owner_name": "Rahul",
+  "changed": true
+}
+```
+
+`status`: `claimed` (the lead's Sales opportunity moved to the caller; Compass logs "Owner changed
+due to manual dialing"), `already_owner`, `created` (unknown number: new lead owned by the caller),
+`no_opportunity` (the lead has no Sales opportunity), `not_sales` (the caller isn't in Sales;
+nothing changed). 400 = invalid phone; 401/403 as elsewhere. The app waits 3 s at most and dials
+whatever happens.

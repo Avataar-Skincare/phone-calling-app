@@ -49,6 +49,19 @@ export interface CallLogEntry {
   startedAt: number;
 }
 
+/**
+ * Why a call-log lookup found nothing (Android, ADR 0011). Counts and flags only: no numbers, no
+ * call-log contents.
+ */
+export interface CallLogLookupDebug {
+  /** READ_CALL_LOG is granted. */
+  permission: boolean;
+  /** Outgoing entries the app could see since the call was placed. */
+  outgoingSince: number;
+  /** One of them was to this number. */
+  matchedNumber: boolean;
+}
+
 /** A folder the agent granted read access to (Android Storage Access Framework tree). */
 export interface RecordingsFolder {
   /** content:// tree URI; the app stores it and re-checks it with getRecordingsFolder(). */
@@ -69,6 +82,24 @@ export interface RecordingFile {
   mimeType: string;
 }
 
+/**
+ * A recording another app shared to this one (Android: Share → Compass Dialer, ADR 0010). The native
+ * side has already copied it into the app's cache, so `uri` is a file:// the app owns.
+ */
+export interface SharedRecording {
+  /** file:// in the app cache; "" when `error` is set. */
+  uri: string;
+  /** The sender's file name, e.g. "record-1794566075519.wav". */
+  name: string;
+  sizeBytes: number;
+  /** "" when the sender gave none (use the file extension). */
+  mimeType: string;
+  /** epoch ms: when the file arrived */
+  sharedAt: number;
+  /** Set when the file could not be copied: over 25 MB, or not readable. */
+  error?: "too_big" | "unreadable" | "not_audio";
+}
+
 export interface Sim {
   id: string;
   label: string;
@@ -79,6 +110,8 @@ export type PlaceCallResult = "direct" | "dialer";
 
 interface NativeSimDialer {
   addListener(event: "callState", listener: (e: CallStateEvent) => void): { remove: () => void };
+  addListener(event: "sharedRecording", listener: (e: SharedRecording) => void): { remove: () => void };
+  takeSharedRecording(): Promise<SharedRecording | null>;
   getPermissions(): Promise<PermissionResponse>;
   requestPermissions(): Promise<PermissionResponse>;
   capabilities(): Promise<DialerCapabilities>;
@@ -87,6 +120,9 @@ interface NativeSimDialer {
   listSims(): Promise<Sim[]>;
   placeCall(number: string, simId: string | null): Promise<PlaceCallResult>;
   lastCallFromLog(number: string, sinceMs: number): Promise<CallLogEntry | null>;
+  callLogVisibleCount(): Promise<number>;
+  defaultDialerPackage(): Promise<string | null>;
+  callLogLookupDebug(number: string, sinceMs: number): Promise<CallLogLookupDebug>;
   pickRecordingsFolder(): Promise<RecordingsFolder | null>;
   getRecordingsFolder(uri: string): Promise<RecordingsFolder | null>;
   listRecordings(treeUri: string, fromMs: number, toMs: number): Promise<RecordingFile[]>;
@@ -153,6 +189,34 @@ export function getLastCallFromLog(e164: string, sinceMs: number): Promise<CallL
   return native && Platform.OS === "android" ? native.lastCallFromLog(e164, sinceMs) : Promise.resolve(null);
 }
 
+/**
+ * Android: how many call-log entries (any type, last 30 days) the app can see. -1 = unknown: not
+ * Android, no READ_CALL_LOG, an older build, or an error. 0 with the permission on means the phone
+ * hides the call log (ADR 0011). A count only.
+ */
+export function getCallLogVisibleCount(): Promise<number> {
+  if (!native || Platform.OS !== "android" || typeof native.callLogVisibleCount !== "function") {
+    return Promise.resolve(-1);
+  }
+  return native.callLogVisibleCount().catch(() => -1);
+}
+
+/** Android: package name of the phone's default dialer (e.g. "com.google.android.dialer"); null when unknown. */
+export function getDefaultDialerPackage(): Promise<string | null> {
+  if (!native || Platform.OS !== "android" || typeof native.defaultDialerPackage !== "function") {
+    return Promise.resolve(null);
+  }
+  return native.defaultDialerPackage().catch(() => null);
+}
+
+/** Android: why getLastCallFromLog found nothing. null when unavailable (iOS, no module, older build, error). */
+export function getCallLogLookupDebug(e164: string, sinceMs: number): Promise<CallLogLookupDebug | null> {
+  if (!native || Platform.OS !== "android" || typeof native.callLogLookupDebug !== "function") {
+    return Promise.resolve(null);
+  }
+  return native.callLogLookupDebug(e164, sinceMs).catch(() => null);
+}
+
 /** Android: open the system folder picker (read access only). null when cancelled or unavailable. */
 export function pickRecordingsFolder(): Promise<RecordingsFolder | null> {
   return native && Platform.OS === "android" ? native.pickRecordingsFolder() : Promise.resolve(null);
@@ -187,6 +251,24 @@ export function uploadRecording(
   if (native && Platform.OS === "android")
     return native.uploadRecording(fileUri, url, contentType, sizeBytes);
   return Promise.reject(new Error("Recording upload is Android only"));
+}
+
+/**
+ * Android: the recording shared to the app that hasn't been taken yet (also one that started the app),
+ * then null. null on iOS, without the native module, or in a build made before sharing existed.
+ */
+export function takeSharedRecording(): Promise<SharedRecording | null> {
+  if (!native || Platform.OS !== "android") return Promise.resolve(null);
+  // An older Android build has the module but not this function.
+  return typeof native.takeSharedRecording === "function"
+    ? native.takeSharedRecording().catch(() => null)
+    : Promise.resolve(null);
+}
+
+/** A recording is shared to the app while it is running. No-op when unavailable. */
+export function addSharedRecordingListener(listener: (e: SharedRecording) => void): { remove: () => void } {
+  if (!native || Platform.OS !== "android") return { remove: () => {} };
+  return native.addListener("sharedRecording", listener);
 }
 
 export function addCallStateListener(listener: (e: CallStateEvent) => void): { remove: () => void } {

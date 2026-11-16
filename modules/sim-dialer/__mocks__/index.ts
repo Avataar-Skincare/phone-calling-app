@@ -7,6 +7,7 @@
  */
 import type {
   CallLogEntry,
+  CallLogLookupDebug,
   CallStateEvent,
   DialerCapabilities,
   NativeCallState,
@@ -14,6 +15,7 @@ import type {
   PlaceCallResult,
   RecordingFile,
   RecordingsFolder,
+  SharedRecording,
   Sim,
 } from "../index";
 
@@ -32,6 +34,11 @@ let capabilities: DialerCapabilities = { ...ANDROID };
 let callLog: CallLogEntry | null = null;
 let permissions: PermissionResponse = { status: "granted", granted: true, canAskAgain: true };
 let callState: NativeCallState | "unknown" = "idle";
+/** Entries the phone shows in the last 30 days (-1 = unknown). A healthy phone has some. */
+let visibleCount = 12;
+let dialerPackage: string | null = null;
+/** Overrides what callLogLookupDebug reports; null = derived from the capabilities. */
+let lookupDebug: CallLogLookupDebug | null = null;
 let sims: Sim[] = [{ id: "sim-1", label: "Jio" }];
 
 /** The folder the picker returns and getRecordingsFolder() recognises; null = none / access lost. */
@@ -51,6 +58,12 @@ export const placeCall = jest.fn(async (_e164: string, _simId?: string | null): 
   capabilities.canDirectDial ? "direct" : "dialer",
 );
 export const getLastCallFromLog = jest.fn(async (_e164: string, _sinceMs: number) => callLog);
+export const getCallLogVisibleCount = jest.fn(async () => (capabilities.canReadCallLog ? visibleCount : -1));
+export const getDefaultDialerPackage = jest.fn(async () => dialerPackage);
+export const getCallLogLookupDebug = jest.fn(
+  async (_e164: string, _sinceMs: number): Promise<CallLogLookupDebug | null> =>
+    lookupDebug ?? { permission: capabilities.canReadCallLog, outgoingSince: 0, matchedNumber: false },
+);
 export const pickRecordingsFolder = jest.fn(async () => recordingsFolder);
 export const getRecordingsFolder = jest.fn(async (uri: string) =>
   recordingsFolder && recordingsFolder.uri === uri ? recordingsFolder : null,
@@ -67,6 +80,25 @@ export const addCallStateListener = jest.fn((l: Listener) => {
   listeners.add(l);
   return { remove: () => listeners.delete(l) };
 });
+
+/** Files shared to the app and not yet taken (cold start, or shared while no listener was up). */
+let sharedQueue: SharedRecording[] = [];
+const sharedListeners = new Set<(e: SharedRecording) => void>();
+export const takeSharedRecording = jest.fn(async () => sharedQueue.shift() ?? null);
+export const addSharedRecordingListener = jest.fn((l: (e: SharedRecording) => void) => {
+  sharedListeners.add(l);
+  return { remove: () => sharedListeners.delete(l) };
+});
+
+/**
+ * Share a recording to the app. Like the native side it is queued for takeSharedRecording() AND
+ * emitted to listeners; the app takes it once (the queue is what a cold start reads).
+ * `emit: false` simulates a cold start: only takeSharedRecording() sees it.
+ */
+export function __shareRecording(file: SharedRecording, opts: { emit?: boolean } = {}) {
+  sharedQueue.push(file);
+  if (opts.emit !== false) sharedListeners.forEach((l) => l(file));
+}
 
 /** Deliver a call-state event to the app, as the native module would. */
 export function __emit(e: CallStateEvent) {
@@ -86,6 +118,21 @@ export function __setPermissions(p: Partial<PermissionResponse>) {
 /** Set what the Android call log reports for the call (talk time 0 = not answered). */
 export function __setCallLog(entry: CallLogEntry | null) {
   callLog = entry;
+}
+
+/** Call-log entries the phone shows (0 = hidden by the phone maker, -1 = unknown). */
+export function __setCallLogVisible(n: number) {
+  visibleCount = n;
+}
+
+/** The phone's default dialer package, e.g. "com.google.android.dialer". */
+export function __setDialerPackage(p: string | null) {
+  dialerPackage = p;
+}
+
+/** What callLogLookupDebug reports; null = derived (permission from capabilities, nothing seen). */
+export function __setLookupDebug(d: CallLogLookupDebug | null) {
+  lookupDebug = d;
 }
 
 export function __setSims(s: Sim[]) {
@@ -114,9 +161,14 @@ export function __reset() {
   permissions = { status: "granted", granted: true, canAskAgain: true };
   callState = "idle";
   sims = [{ id: "sim-1", label: "Jio" }];
+  visibleCount = 12;
+  dialerPackage = null;
+  lookupDebug = null;
   recordingsFolder = null;
   recordings = [];
   uploadStatus = 200;
+  sharedQueue = [];
+  sharedListeners.clear();
   [
     getPermissions,
     requestPermissions,
@@ -126,9 +178,14 @@ export function __reset() {
     listSims,
     placeCall,
     getLastCallFromLog,
+    getCallLogVisibleCount,
+    getDefaultDialerPackage,
+    getCallLogLookupDebug,
     pickRecordingsFolder,
     getRecordingsFolder,
     listRecordings,
     uploadRecording,
+    takeSharedRecording,
+    addSharedRecordingListener,
   ].forEach((f) => f.mockClear());
 }

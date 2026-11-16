@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.CallLog
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import android.telecom.PhoneAccountHandle
 import android.telecom.TelecomManager
 import android.telephony.PhoneStateListener
@@ -26,6 +27,7 @@ import expo.modules.kotlin.exception.Exceptions
 import expo.modules.kotlin.functions.Queues
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
@@ -64,7 +66,7 @@ class SimDialerModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("SimDialer")
 
-    Events("callState")
+    Events("callState", "sharedRecording")
 
     OnCreate { startTracking() }
 
@@ -105,6 +107,24 @@ class SimDialerModule : Module() {
     /** Latest outgoing call to `number` placed at or after `sinceMs`, from the call log; null if none. */
     AsyncFunction("lastCallFromLog") { number: String, sinceMs: Double ->
       lastCallFromLog(number, sinceMs)
+    }
+
+    /**
+     * How many call-log entries (any type) from the last 30 days this app can see; -1 when
+     * READ_CALL_LOG is missing or the phone refuses. 0 with the permission on usually means the phone
+     * maker hides the call log (ADR 0011). Only a count: nothing from the log leaves this function.
+     */
+    AsyncFunction("callLogVisibleCount") { callLogVisibleCount() }
+
+    /** Package name of the phone's default dialer, or null. */
+    AsyncFunction("defaultDialerPackage") { defaultDialerPackage() }
+
+    /**
+     * Why lastCallFromLog found nothing: {permission, outgoingSince, matchedNumber}. Counts and
+     * flags only, never numbers or log contents (ADR 0011).
+     */
+    AsyncFunction("callLogLookupDebug") { number: String, sinceMs: Double ->
+      callLogLookupDebug(number, sinceMs)
     }
 
     /** Opens the system folder picker; resolves {uri, name} or null when cancelled. Read access only. */
@@ -157,6 +177,29 @@ class SimDialerModule : Module() {
     /** Audio files in the folder (and one level of sub-folders) modified in [fromMs, toMs], newest first, max 50. */
     AsyncFunction("listRecordings") { treeUri: String, fromMs: Double, toMs: Double ->
       listRecordings(Uri.parse(treeUri), fromMs.toLong(), toMs.toLong())
+    }
+
+    /**
+     * A recording shared to this app from another app (Share → Compass Dialer; ADR 0010). Copied to
+     * the cache the moment it arrives, because the sender's read grant ends with the activity.
+     * Resolves the pending file once, then null. Also picks up a share that started the app (cold start).
+     */
+    AsyncFunction("takeSharedRecording") {
+      appContext.currentActivity?.intent?.let { receiveShared(it) }?.let { setPendingShared(it) }
+      takePendingShared()
+    }.runOnQueue(Queues.DEFAULT)
+
+    /** The app was already running when the file was shared. Copy off the main thread, then tell JS. */
+    OnNewIntent { intent ->
+      val uri = takeShareUri(intent)
+      if (uri != null) {
+        val type = intent.type
+        Thread {
+          val shared = copyShared(uri, type)
+          setPendingShared(shared)
+          sendEvent("sharedRecording", shared)
+        }.start()
+      }
     }
 
     /** PUT the file's bytes to `url`; returns {status}. Non-2xx statuses are returned, IO failures throw. */
@@ -333,6 +376,58 @@ class SimDialerModule : Module() {
     }
   }
 
+  /** Entries of the last 30 days, any type; -1 without permission or when the query fails. */
+  private fun callLogVisibleCount(): Int {
+    if (!isGranted(Manifest.permission.READ_CALL_LOG)) return -1
+    val since = System.currentTimeMillis() - VISIBLE_WINDOW_MS
+    return try {
+      context.contentResolver.query(
+        CallLog.Calls.CONTENT_URI,
+        arrayOf(CallLog.Calls._ID),
+        "${CallLog.Calls.DATE} >= ?",
+        arrayOf(since.toString()),
+        null,
+      )?.use { c -> c.count } ?: -1
+    } catch (e: Exception) {
+      -1
+    }
+  }
+
+  private fun defaultDialerPackage(): String? =
+    try {
+      telecom.defaultDialerPackage
+    } catch (e: Exception) {
+      null
+    }
+
+  /** Same query as lastCallFromLog, but only counts: outgoing entries since `sinceMs`, and whether one matched. */
+  private fun callLogLookupDebug(number: String, sinceMs: Double): Map<String, Any> {
+    if (!isGranted(Manifest.permission.READ_CALL_LOG)) {
+      return mapOf("permission" to false, "outgoingSince" to 0, "matchedNumber" to false)
+    }
+    val want = number.filter { it.isDigit() }.takeLast(10)
+    var outgoing = 0
+    var matched = false
+    try {
+      context.contentResolver.query(
+        CallLog.Calls.CONTENT_URI,
+        arrayOf(CallLog.Calls.NUMBER),
+        "${CallLog.Calls.TYPE} = ? AND ${CallLog.Calls.DATE} >= ?",
+        arrayOf(CallLog.Calls.OUTGOING_TYPE.toString(), sinceMs.toLong().toString()),
+        null,
+      )?.use { c ->
+        while (c.moveToNext()) {
+          outgoing++
+          val n = (c.getString(0) ?: "").filter { it.isDigit() }.takeLast(10)
+          if (want.isNotEmpty() && n == want) matched = true
+        }
+      }
+    } catch (e: Exception) {
+      // Counted as nothing visible.
+    }
+    return mapOf("permission" to true, "outgoingSince" to outgoing, "matchedNumber" to matched)
+  }
+
   // ── Call recordings (read-only folder grant) ───────────────────────────────────────────────
 
   private fun folderName(treeUri: Uri): String {
@@ -445,7 +540,134 @@ class SimDialerModule : Module() {
     }
   }
 
+  // ── Recordings shared from another app (Share → Compass Dialer) ───────────────────────────
+
+  private val sharedLock = Any()
+  private var pendingShared: Map<String, Any>? = null
+
+  private fun setPendingShared(shared: Map<String, Any>?) {
+    if (shared != null) synchronized(sharedLock) { pendingShared = shared }
+  }
+
+  private fun takePendingShared(): Map<String, Any>? =
+    synchronized(sharedLock) {
+      val s = pendingShared
+      pendingShared = null
+      s
+    }
+
+  /**
+   * The file Uri of an ACTION_SEND intent, and marks the intent used (stream removed, neutral
+   * action) so it is never handled twice. null for anything else; such intents are left alone.
+   *
+   * Any type is taken here: Google's Phone app shares call recordings (record-<ms>.wav) with a
+   * generic type rather than an audio one, so an audio-only filter hid the app from its share
+   * sheet (seen on a Nothing CMF phone, 2026-11-13). copyShared decides "is it audio" from the
+   * type OR the file name. (Never write a slash-star pair in a KDoc here: Kotlin nests comments.)
+   */
+  @Suppress("DEPRECATION")
+  private fun takeShareUri(intent: Intent): Uri? {
+    if (intent.action != Intent.ACTION_SEND) return null
+    val uri: Uri? =
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+      } else {
+        intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+      }
+    if (uri == null) return null
+    intent.removeExtra(Intent.EXTRA_STREAM)
+    intent.action = Intent.ACTION_MAIN
+    return uri
+  }
+
+  /** Synchronous variant for the cold-start path: copy the intent's shared file, if there is one. */
+  private fun receiveShared(intent: Intent): Map<String, Any>? {
+    val type = intent.type
+    val uri = takeShareUri(intent) ?: return null
+    return copyShared(uri, type)
+  }
+
+  /**
+   * Copies the shared file into `cacheDir/shared-recordings` (streamed, 25 MB cap) and describes it:
+   * {uri: file://…, name, sizeBytes, mimeType, sharedAt}. When it can't be used the map carries
+   * `error` instead: "too_big" or "unreadable" (and uri is ""). Cached copies older than 3 days
+   * are deleted first.
+   */
+  private fun copyShared(source: Uri, intentType: String?): Map<String, Any> {
+    val now = System.currentTimeMillis()
+    val dir = File(context.cacheDir, "shared-recordings").also { it.mkdirs() }
+    dir.listFiles()?.forEach { if (now - it.lastModified() > SHARED_KEEP_MS) it.delete() }
+
+    var name = "recording"
+    var declared = -1L
+    try {
+      context.contentResolver.query(
+        source,
+        arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+        null, null, null,
+      )?.use { c ->
+        if (c.moveToFirst()) {
+          c.getString(0)?.takeIf { it.isNotBlank() }?.let { name = it }
+          if (!c.isNull(1)) declared = c.getLong(1)
+        }
+      }
+    } catch (e: Exception) {
+      // The name and size are nice to have; the bytes decide.
+    }
+    val resolved = try { context.contentResolver.getType(source) } catch (e: Exception) { null }
+    val mime = listOf(resolved, intentType).firstOrNull { it != null && it.startsWith("audio/") && !it.endsWith("/*") } ?: ""
+
+    fun result(uri: String, size: Long, error: String? = null): Map<String, Any> {
+      val m = mutableMapOf<String, Any>(
+        "uri" to uri,
+        "name" to name,
+        "sizeBytes" to size.toDouble(),
+        "mimeType" to mime,
+        "sharedAt" to now.toDouble(),
+      )
+      if (error != null) m["error"] = error
+      return m
+    }
+
+    // Shares of any type reach us (see takeShareUri); only audio is kept, judged by type or name.
+    if (!isAudio(name, mime.ifEmpty { resolved ?: intentType })) return result("", 0, "not_audio")
+    if (declared > MAX_SHARED_BYTES) return result("", declared, "too_big")
+
+    val safe = name.replace(Regex("[^A-Za-z0-9._ -]"), "_").take(80)
+    val target = File(dir, "$now-$safe")
+    try {
+      val input = context.contentResolver.openInputStream(source) ?: return result("", 0, "unreadable")
+      var total = 0L
+      input.use { ins ->
+        target.outputStream().use { os ->
+          val buf = ByteArray(64 * 1024)
+          while (true) {
+            val n = ins.read(buf)
+            if (n < 0) break
+            total += n
+            if (total > MAX_SHARED_BYTES) break
+            os.write(buf, 0, n)
+          }
+        }
+      }
+      if (total > MAX_SHARED_BYTES) {
+        target.delete()
+        return result("", total, "too_big")
+      }
+      return result(Uri.fromFile(target).toString(), total)
+    } catch (e: IOException) {
+      target.delete()
+      return result("", 0, "unreadable")
+    } catch (e: SecurityException) {
+      target.delete()
+      return result("", 0, "unreadable")
+    }
+  }
+
   companion object {
+    private const val MAX_SHARED_BYTES = 26_214_400L
+    private const val SHARED_KEEP_MS = 3L * 24 * 60 * 60 * 1000
+    private const val VISIBLE_WINDOW_MS = 30L * 24 * 60 * 60 * 1000
     private const val PICK_FOLDER_REQUEST = 7311
     private const val MAX_RECORDINGS = 50
     private val AUDIO_EXTENSIONS = setOf("m4a", "aac", "mp3", "wav", "amr", "3gp", "3gpp", "ogg", "opus", "webm")

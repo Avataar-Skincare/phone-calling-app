@@ -268,6 +268,22 @@ export default function HomeScreen() {
           </AppText>
         </View>
         <Pressable
+          onPress={() => router.push("/keypad")}
+          accessibilityRole="button"
+          accessibilityLabel="Keypad"
+          hitSlop={8}
+          style={{
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            backgroundColor: c.accentSoft,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Icon name="dialpad" size={20} color={c.accent} />
+        </Pressable>
+        <Pressable
           onPress={() => router.push("/settings")}
           accessibilityRole="button"
           accessibilityLabel="Account and settings"

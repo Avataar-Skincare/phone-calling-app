@@ -85,6 +85,25 @@ A new call can start while the last one is still being finished.
 WhatsApp chat with the client on Android and iPhone, or WhatsApp's web page when the app isn't
 installed. It needs no permission and doesn't touch the call session.
 
+## Keypad
+
+[ADR 0009](decisions/0009-keypad-claim.md). The round dial-pad button in the home header opens
+`src/app/(main)/keypad.tsx`: a number field (long-press → Paste works; WhatsApp's invisible
+direction marks are stripped), an on-screen pad (1–9, +, 0, backspace) and **Call**, with the
+formatted number underneath. On **Call**:
+
+1. `dialTarget` (`src/lib/dialInput.ts`) turns the text into E.164; too short or not a mobile
+   number keeps Call disabled.
+2. `claimWithCap` (`src/api/mobileDialer.ts`) asks Compass to move the lead to the agent, 3 s at
+   most (see [compass-api.md](compass-api.md#keypad-claim)).
+3. `claimMessage` (`src/lib/claimMessage.ts`) shows what happened, inline, and it stays after the
+   call.
+4. The shared `useCallLead()` dials with the claim's `opportunityId` / `leadId`, so the call is
+   logged and its recording uploaded exactly like a list call. **The call always goes ahead**, also
+   when the claim fails or times out (then there is no opportunity on the call).
+
+List calls don't claim. The call summary card (`CallBanner`) also shows on the Keypad screen.
+
 ## Call recordings (Android)
 
 [ADR 0007](decisions/0007-call-recording-upload.md). The app can't record calls; the agent records
@@ -93,7 +112,15 @@ with the phone's own dialer and the app uploads that file.
 - **Settings → Calling → Call recordings folder**: the agent picks the dialer's folder once
   (Samsung `Recordings/Call`, Xiaomi `MIUI/sound_recorder/call_rec`). Read-only access to that
   folder only; no storage permission. Re-checked on focus; if Android revoked it, shown as "Not set".
-- **Summary card** (`RecordingRow`, answered Android calls only): lists the folder for the call
+- **Upload call recording screen** (`src/app/(main)/recording.tsx`): opens by itself after an
+  answered Android call (`RecordingPrompt` in the main layout; once per call, only for calls that end
+  while the app runs, within 2 minutes, or within 10 minutes if the app was in the background; Skip
+  never brings it back). Steps: choose folder (if none), looking, found → **Upload**, not found →
+  **Choose file** / **Look again**, uploading, uploaded (closes after 2 s), failed → **Try again**
+  (`recordingErrorMessage` in `src/lib/recordingMessages.ts` turns errors into plain words). Shares
+  all logic with the summary card row through `useCallRecording`. All text is short, plain English
+  for agents with limited English.
+- **Summary card** (`RecordingRow`, the fallback for later, answered Android calls only): lists the folder for the call
   window (`recordingWindow` in `src/lib/recordingMatch.ts`: tap − 1 min to end + 10 min), rescans
   every 5 s up to 6 times, and shows "Recording found · time · size" with **Upload**; "No recording
   found" with **Choose file** (that folder's audio from the last 2 hours); or a link to Settings
@@ -101,7 +128,22 @@ with the phone's own dialer and the app uploads that file.
 - `uploadRecording(callId, file)` (`src/features/recordings/uploadRecording.ts`) needs the call's
   `activityId`; runs upload-url → native PUT → complete (see [compass-api.md](compass-api.md#call-recording-upload));
   stores the result in `FinishedCall.recording`; ignores a second tap while uploading.
-- Native: `pickRecordingsFolder`, `getRecordingsFolder`, `listRecordings`, `uploadRecording` in
+- **Share from Google Phone** ([ADR 0010](decisions/0010-share-recording-to-app.md)): where the
+  dialer keeps recordings inside its own app (Nothing/CMF, Pixel, Motorola) there is no folder. The
+  agent opens Phone → Recents → the call → the recording → Share → **Compass Dialer**. The app is a
+  share target for any type (`*/*`), because Google Phone shares recordings with a generic type,
+  not an audio one; only audio is kept (judged by type or file name), anything else is turned away; `SimDialerModule` copies the file to `cacheDir/shared-recordings` at once
+  (25 MB cap, files older than 3 days cleaned up) and hands it to JS by `takeSharedRecording()`
+  (cold start, app to front) or the `sharedRecording` event (app running). `SharedRecordingWatcher`
+  (main layout) opens `/recording?shared=1`, which shows "This recording is for: Call to {name}" +
+  **Upload** + **Choose another call**, or "Which call is this recording for?" with the agent's
+  calls from the last 2 days. Matching (`src/lib/sharedRecordingMatch.ts`): the time in the file name
+  (`record-<epoch ms>.wav` = recording start; `yyyyMMdd_HHmmss` / `yyyy-MM-dd HH-mm-ss` read as IST)
+  against each call's tap − 60 s … end + 60 s; with no time, the newest call that ended in the last 30
+  minutes. Upload is the same `uploadRecording(callId, file)`. A file shared while signed out waits
+  until sign-in. Needs a new native build.
+- Native: `pickRecordingsFolder`, `getRecordingsFolder`, `listRecordings`, `uploadRecording`,
+  `takeSharedRecording` (+ event `sharedRecording`) in
   `modules/sim-dialer`. iOS returns null / [] and rejects the upload ("Recording upload is Android
   only"); the UI is hidden there.
 
@@ -118,6 +160,30 @@ current state and offers **Allow** or **Open Settings**.
 Every Android call log also sends `call_log_permission: "granted" | "denied"`, read when the call
 ends, so Compass's Agent Audit can count calls whose talk time is unknown (access turned off
 mid-call). iOS sends nothing.
+
+### "Before you start" check ([ADR 0011](decisions/0011-startup-check-and-call-diag.md))
+
+Some phones (Xiaomi, Realme, Oppo) hide the call log even when Android says access is granted. So
+`StartupCheck` (`src/features/setup/`) also looks when the main screens mount and each time the app
+returns to the foreground (at most once a second). Rules are in `src/lib/startupCheck.ts`:
+
+- **Required, no Skip:** phone access missing; call-log access missing.
+- **Warning, Skip is quiet for 24 h:** call-log access is on but `callLogVisibleCount()` is 0.
+- **Tip, never blocks:** Google Phone share steps. The recordings folder is not asked for on this
+  screen; agents set it in Settings (or on the recording screen).
+
+`src/app/(main)/setup-check.tsx` ("Before you start") opens by itself for a required issue or an
+un-skipped warning. Continue is enabled when nothing required is left. Settings has **Check my
+phone** to open it by hand. On Google Phone the recording screen shows the share steps first and
+"Choose folder" second.
+
+New native functions (Android; iOS returns -1 / nil / neutral): `callLogVisibleCount()`,
+`defaultDialerPackage()`, `callLogLookupDebug(number, sinceMs)`. Each has a safe fallback in
+`index.ts` for iOS, Expo Go and older builds.
+
+When talk time is missing, `finishCall` also stores `call_diag` (permission states, whether the log
+is visible, why the lookup failed, phone model, app version) and sends it as `data.call_diag`. It is
+never sent on a call with talk time. Counts and flags only.
 
 ## SIM choice (Android)
 

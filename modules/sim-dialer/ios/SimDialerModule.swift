@@ -15,7 +15,7 @@ public class SimDialerModule: Module {
   public func definition() -> ModuleDefinition {
     Name("SimDialer")
 
-    Events("callState")
+    Events("callState", "sharedRecording")
 
     OnCreate {
       let delegate = CallObserverDelegate { [weak self] payload in
@@ -57,6 +57,19 @@ public class SimDialerModule: Module {
     }
 
     // Call recordings are Android only (folder grant + file upload); iOS has no equivalent.
+    // Android only (ADR 0011): neutral values here.
+    AsyncFunction("callLogVisibleCount") { () -> Int in
+      -1
+    }
+
+    AsyncFunction("defaultDialerPackage") { () -> String? in
+      nil
+    }
+
+    AsyncFunction("callLogLookupDebug") { (_: String, _: Double) -> [String: Any] in
+      ["permission": false, "outgoingSince": 0, "matchedNumber": false]
+    }
+
     AsyncFunction("pickRecordingsFolder") { () -> [String: String]? in
       nil
     }
@@ -67,6 +80,12 @@ public class SimDialerModule: Module {
 
     AsyncFunction("listRecordings") { (_: String, _: Double, _: Double) -> [[String: Any]] in
       []
+    }
+
+    // Sharing a recording to the app is Android only (ADR 0010); the event is declared so the JS
+    // contract is identical, but never sent.
+    AsyncFunction("takeSharedRecording") { () -> [String: Any]? in
+      nil
     }
 
     AsyncFunction("uploadRecording") { (_: String, _: String, _: String, _: Double, promise: Promise) in

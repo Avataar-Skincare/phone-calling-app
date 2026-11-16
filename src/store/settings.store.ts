@@ -9,6 +9,9 @@ interface SettingsState {
   permissionIntroSeen: boolean;
   /** Android: the folder the phone dialer saves call recordings in (read access granted once). */
   recordingsFolder: { uri: string; name: string } | null;
+  /** epoch ms: the agent skipped the "phone is hiding call logs" warning (quiet for 24 h, ADR 0011). */
+  hiddenLogSkippedAt: number | null;
+  skipHiddenLogWarning: () => void;
   setSimId: (id: string | null) => void;
   setRecordingsFolder: (folder: { uri: string; name: string } | null) => void;
   markPermissionIntroSeen: () => void;
@@ -20,6 +23,8 @@ export const useSettingsStore = create<SettingsState>()(
       simId: null,
       permissionIntroSeen: false,
       recordingsFolder: null,
+      hiddenLogSkippedAt: null,
+      skipHiddenLogWarning: () => set({ hiddenLogSkippedAt: Date.now() }),
       setSimId: (simId) => set({ simId }),
       setRecordingsFolder: (recordingsFolder) => set({ recordingsFolder }),
       markPermissionIntroSeen: () => set({ permissionIntroSeen: true }),

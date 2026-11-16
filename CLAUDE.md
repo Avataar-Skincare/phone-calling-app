@@ -21,6 +21,9 @@ compile the module: see [docs/development.md](docs/development.md#checking-nativ
   out, clear the session; never navigate to login.
 - Screens use `LeadItem`, never raw Smart View rows.
 - Rules live in pure functions in `src/lib/` with a `*.test.ts`. Change both together.
+- Keypad calls (`src/app/(main)/keypad.tsx`) claim the lead first via `src/api/mobileDialer.ts`, capped at
+  3 s, then dial through `useCallLead()`; the call must always go ahead ([ADR 0009](docs/decisions/0009-keypad-claim.md)).
+  List calls never claim.
 - Call sessions: all transitions in `src/lib/callState.ts`. `startCall()` stores the session before
   dialing.
 - `modules/sim-dialer`: Kotlin, Swift and `index.ts` must stay in step. `READ_CALL_LOG` is used for
@@ -29,6 +32,8 @@ compile the module: see [docs/development.md](docs/development.md#checking-nativ
 - Android calling requires call-log access, checked before **every** call (`mustAskForCallLog`,
   [ADR 0008](docs/decisions/0008-call-log-access-required.md)); don't add a way to call without it.
   Each Android call log sends `call_log_permission` for Compass's Agent Audit.
+- App open runs the "Before you start" check (`src/lib/startupCheck.ts`, [ADR 0011](docs/decisions/0011-startup-check-and-call-diag.md));
+  `call_diag` goes out only on calls without talk time, counts and flags only. Keep both.
 - `/android` and `/ios` are generated; never edit them.
 - Times to Compass: fields Compass parses (`occurred_at`, filters) are ISO UTC (`toISOString()`).
   The readable call-log details (`call_*_at`) are IST "2026-11-06 18:21:50" (`toIstDateTime()`),
@@ -54,12 +59,20 @@ the phone's own dialer and the app uploads that file afterwards.
 
 **Flow:** the agent picks the dialer's recordings folder once in Settings (read-only folder grant,
 no storage permission) → call ends → app logs it (`POST /activities/log`, returns `activity_id`) →
-summary card finds the recording by time and number and shows **Upload** (or **Choose file**) →
+the Upload call recording screen opens by itself (`src/app/(main)/recording.tsx`, `RecordingPrompt`; the summary card row is the fallback) and finds the recording by time and number, **Upload** (or **Choose file**) →
 `POST /mobile-dialer/recordings/:activityId/upload-url` → phone PUTs the file to S3 →
 `POST /mobile-dialer/recordings/:activityId/complete` → Compass saves `recording_url`, so ▶ Play
 works on the website and in the Calls tab. Code: `src/features/recordings/`,
 `src/lib/recordingMatch.ts`, `src/api/recordings.ts`, `modules/sim-dialer` (4 functions). This is the
 app's second write to Compass (ADR 0007 supersedes the "only write" line in 0005/0006).
+
+**Google Phone (Nothing/CMF, Pixel, Motorola) keeps recordings inside the Phone app, so there is no
+folder to pick ([ADR 0010](docs/decisions/0010-share-recording-to-app.md)).** The agent opens
+Phone → Recents → the call → the recording → **Share** → **Compass Dialer**. The app is an any-type (`*/*`, Google Phone's share is not typed as audio)
+share target (`app.json` intent filter), copies the file to its cache at once (`takeSharedRecording`,
+event `sharedRecording`), matches it to a call from the time in the name (`record-<epoch ms>.wav`,
+`src/lib/sharedRecordingMatch.ts`), and uploads it with the same `uploadRecording`. Watcher:
+`SharedRecordingWatcher`; screen: `/recording?shared=1`. Needs a new native build.
 
 **Compass side (Mithilesh, `leadsquared-avataar-server`), done and live:** the upload-url and complete
 endpoints, S3 storage, and the play endpoint redirecting to the stored file. Not built here.
